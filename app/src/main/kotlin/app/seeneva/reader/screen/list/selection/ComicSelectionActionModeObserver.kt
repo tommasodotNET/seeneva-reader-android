@@ -57,6 +57,16 @@ class ComicSelectionActionModeObserver(
                     finishActionMode()
                     true
                 }
+                R.id.add_to_collection -> {
+                    actionModeCallback.onAddToCollectionSelectedClick()
+                    finishActionMode()
+                    true
+                }
+                R.id.remove_from_collection -> {
+                    actionModeCallback.onRemoveFromCollectionSelectedClick()
+                    finishActionMode()
+                    true
+                }
                 R.id.change_complete_state -> {
                     val allCompleted = mode.allSelectedCompleted
 
@@ -75,6 +85,10 @@ class ComicSelectionActionModeObserver(
 
         override fun onPrepareActionMode(mode: ActionMode, menu: Menu): Boolean {
             mode.setSelectedCount()
+
+            //'remove from collection' is available only when the list is filtered by a collection
+            menu.findItem(R.id.remove_from_collection).isVisible =
+                actionModeCallback.activeCollectionName() != null
 
             menu.findItem(R.id.change_complete_state)
                 .setTitle(
@@ -203,6 +217,21 @@ class ComicSelectionActionModeObserver(
          * @param completed is comics should be marked as completed
          */
         fun onMarkAsCompletedSelectedClick(completed: Boolean)
+
+        /**
+         * On add all selected comics into a collection click
+         */
+        fun onAddToCollectionSelectedClick()
+
+        /**
+         * On remove all selected comics from the currently active collection click
+         */
+        fun onRemoveFromCollectionSelectedClick()
+
+        /**
+         * @return name of the currently active comic book collection or null if there is no any
+         */
+        fun activeCollectionName(): String?
     }
 
     private companion object {

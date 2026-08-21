@@ -39,6 +39,7 @@ import androidx.recyclerview.selection.SelectionPredicates
 import androidx.recyclerview.selection.SelectionTracker
 import androidx.recyclerview.selection.StorageStrategy
 import androidx.recyclerview.widget.GridLayoutManager
+import androidx.recyclerview.widget.ConcatAdapter
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import app.seeneva.reader.R
@@ -55,17 +56,22 @@ import app.seeneva.reader.logic.ComicListViewType
 import app.seeneva.reader.logic.comic.AddComicBookMode
 import app.seeneva.reader.logic.comic.ComicHelper
 import app.seeneva.reader.logic.entity.ComicAddResult
+import app.seeneva.reader.logic.entity.ComicCollection
 import app.seeneva.reader.logic.entity.ComicListItem
 import app.seeneva.reader.logic.entity.query.QuerySort
 import app.seeneva.reader.logic.entity.query.filter.Filter
 import app.seeneva.reader.logic.entity.query.filter.FilterGroup
 import app.seeneva.reader.presenter.PresenterStatefulView
 import app.seeneva.reader.screen.list.adapter.ComicsAdapter
+import app.seeneva.reader.screen.list.adapter.ComicCollectionsAdapter
 import app.seeneva.reader.screen.list.adapter.FiltersAdapter
 import app.seeneva.reader.screen.list.dialog.AddModeSelectorDialog
+import app.seeneva.reader.screen.list.dialog.AddToCollectionDialog
 import app.seeneva.reader.screen.list.dialog.ComicRenameDialog
+import app.seeneva.reader.screen.list.dialog.NewCollectionDialog
 import app.seeneva.reader.screen.list.dialog.filters.EditFiltersDialog
 import app.seeneva.reader.screen.list.dialog.info.ComicInfoFragment
+import app.seeneva.reader.screen.list.dialog.radiobuttons.ComicCollectionsDialog
 import app.seeneva.reader.screen.list.dialog.radiobuttons.ComicsSortDialog
 import app.seeneva.reader.screen.list.entity.FilterLabel
 import app.seeneva.reader.screen.list.selection.ComicDetailsLookup
@@ -123,6 +129,39 @@ interface ComicsListView : PresenterStatefulView {
 
     fun showFiltersEditor(selectedFilters: Map<FilterGroup.ID, Filter>)
 
+    /**
+     * Show comic book collections selector
+     * @param collections all user collections
+     * @param activeCollectionId id of the currently active collection or null
+     */
+    fun showCollectionsPicker(collections: List<ComicCollection>, activeCollectionId: Long?)
+
+    /**
+     * Show a dialog which allows to add comic books into a collection
+     * @param collections all user collections
+     * @param bookIds comic book ids to add
+     */
+    fun showAddToCollection(collections: List<ComicCollection>, bookIds: Set<Long>)
+
+    /**
+     * Comic books were added into a collection
+     * @param count count of added comic books
+     * @param collectionName name of the target collection
+     */
+    fun onComicsAddedToCollection(count: Int, collectionName: String)
+
+    /**
+     * Comic books were removed from a collection
+     * @param count count of removed comic books
+     * @param collectionName name of the target collection
+     */
+    fun onComicsRemovedFromCollection(count: Int, collectionName: String)
+
+    /**
+     * User typed invalid comic book collection name
+     */
+    fun onInvalidCollectionName()
+
     fun setComicListType(listViewType: ComicListViewType)
 
     /**
@@ -162,6 +201,9 @@ class ComicsListFragment(
 ) : Fragment(R.layout.fragment_comic_list),
     ComicsListView,
     ComicsSortDialog.Callback,
+    ComicCollectionsDialog.Callback,
+    AddToCollectionDialog.Callback,
+    NewCollectionDialog.Callback,
     ComicRenameDialog.Callback,
     EditFiltersDialog.Callback,
     AddModeSelectorDialog.Callback,
@@ -200,6 +242,7 @@ class ComicsListFragment(
         }
 
         listAdapter.setComicViewType(newType)
+        collectionsAdapter.setViewType(newType)
 
         requireActivity().invalidateOptionsMenu()
     }
@@ -210,7 +253,7 @@ class ComicsListFragment(
         SelectionTracker.Builder(
             COMIC_SELECTION_ID,
             viewBinding.recyclerView,
-            ComicKeyProvider(listAdapter),
+            ComicKeyProvider(listAdapter) { collectionsAdapter.itemCount },
             ComicDetailsLookup(viewBinding.recyclerView),
             StorageStrategy.createLongStorage()
         ).withSelectionPredicate(SelectionPredicates.createSelectAnything())
@@ -237,6 +280,17 @@ class ComicsListFragment(
                                     completed
                                 )
                             }
+
+                            override fun onAddToCollectionSelectedClick() {
+                                presenter.onAddToCollectionClick(listSelectionTracker.selection.toHashSet())
+                            }
+
+                            override fun onRemoveFromCollectionSelectedClick() {
+                                presenter.removeFromActiveCollection(listSelectionTracker.selection.toHashSet())
+                            }
+
+                            override fun activeCollectionName() =
+                                presenter.activeCollection.value?.name
                         })
                 )
 
@@ -252,9 +306,25 @@ class ComicsListFragment(
 
     private val filtersAdapter = FiltersAdapter(object : FiltersAdapter.Callback {
         override fun onFilterClicked(filterLabel: FilterLabel) {
-            presenter.removeFilter(filterLabel.groupId)
+            when (val id = filterLabel.id) {
+                is FilterLabel.Id.Group -> presenter.removeFilter(id.groupId)
+                FilterLabel.Id.Collection -> presenter.onCollectionSelected(null)
+            }
         }
     })
+
+    private val collectionsAdapter by lazy {
+        ComicCollectionsAdapter(currentListType, get(), layoutInflater) {
+            presenter.onCollectionSelected(it.id)
+            viewBinding.recyclerView.scrollToPosition(0)
+        }
+    }
+
+    private val visibleCollections
+        get() = presenter.collections
+            .combine(presenter.activeCollection) { collections, activeCollection ->
+                collections.takeIf { activeCollection == null }.orEmpty()
+            }
 
     private val listAdapter by lazy {
         ComicsAdapter(
@@ -376,7 +446,7 @@ class ComicsListFragment(
         })
 
         with(viewBinding.swipeSyncView) {
-            setColorSchemeResources(R.color.deep_purple_400)
+            setColorSchemeResources(R.color.panels_blue)
             setOnRefreshListener { presenter.onSyncClick() }
         }
 
@@ -397,7 +467,7 @@ class ComicsListFragment(
             it.setHasFixedSize(true)
 
             it.layoutManager = listLayoutManager
-            it.adapter = listAdapter
+            it.adapter = ConcatAdapter(collectionsAdapter, listAdapter)
 
             it.addItemDecoration(ComicGridMarginDecoration(resources.getDimensionPixelSize(R.dimen.comic_thumb_grid_margin)))
         }
@@ -443,14 +513,27 @@ class ComicsListFragment(
             .filterIsInstance<ComicsPagingState.Loaded>()
             .observe(viewLifecycleOwner) { listAdapter.submitData(it.pagingData) }
 
+        visibleCollections.observe(viewLifecycleOwner) {
+            collectionsAdapter.submitList(it)
+        }
+
         // listen to pagination states and update screen state
         presenter.pagingState
-            .transformLatest {
-                when (it) {
+            .combine(visibleCollections) { pagingState, collections ->
+                pagingState to collections
+            }
+            .transformLatest { (pagingState, collections) ->
+                when (pagingState) {
                     ComicsPagingState.Loading, ComicsPagingState.Idle -> emit(ScreenState.STATE_LOADING)
                     is ComicsPagingState.Loaded -> {
-                        when (it.totalCount) {
-                            0L -> emit(ScreenState.STATE_EMPTY)
+                        when (pagingState.totalCount) {
+                            0L -> emit(
+                                if (collections.isEmpty()) {
+                                    ScreenState.STATE_EMPTY
+                                } else {
+                                    ScreenState.STATE_DEFAULT
+                                }
+                            )
                             else -> {
                                 emitAll(listAdapter.loadStateFlow
                                     .filter { s ->
@@ -459,7 +542,11 @@ class ComicsListFragment(
                                                 s.append is LoadState.NotLoading
                                     }
                                     .map { s ->
-                                        if (listAdapter.itemCount == 0 && s.prepend.endOfPaginationReached && s.append.endOfPaginationReached) {
+                                        if (listAdapter.itemCount == 0 &&
+                                            collections.isEmpty() &&
+                                            s.prepend.endOfPaginationReached &&
+                                            s.append.endOfPaginationReached
+                                        ) {
                                             ScreenState.STATE_NOTHING_FOUND
                                         } else {
                                             ScreenState.STATE_DEFAULT
@@ -512,7 +599,11 @@ class ComicsListFragment(
     override fun onSaveInstanceState(outState: Bundle) {
         super.onSaveInstanceState(outState)
         listSelectionTracker.onSaveInstanceState(outState)
-        outState.putInt(STATE_LIST_FIRST_ITEM, listLayoutManager.findFirstVisibleItemPosition())
+        outState.putInt(
+            STATE_LIST_FIRST_ITEM,
+            (listLayoutManager.findFirstVisibleItemPosition() - collectionsAdapter.itemCount)
+                .coerceAtLeast(0)
+        )
     }
 
     override fun onCreateOptionsMenu(menu: Menu, inflater: MenuInflater) {
@@ -563,6 +654,11 @@ class ComicsListFragment(
 
             R.id.sort -> {
                 presenter.onSortListClick()
+                true
+            }
+
+            R.id.collections -> {
+                presenter.onCollectionsClick()
                 true
             }
 
@@ -690,6 +786,91 @@ class ComicsListFragment(
         }
     }
 
+    override fun showCollectionsPicker(
+        collections: List<ComicCollection>,
+        activeCollectionId: Long?
+    ) {
+        if (collections.isEmpty()) {
+            newSnackbar(resources.getString(R.string.comic_list_collections_empty)).show()
+            return
+        }
+
+        if (childFragmentManager.findFragmentByTag(TAG_COLLECTIONS) == null) {
+            ComicCollectionsDialog.newInstance(collections, activeCollectionId)
+                .show(childFragmentManager, TAG_COLLECTIONS)
+        }
+    }
+
+    override fun showAddToCollection(collections: List<ComicCollection>, bookIds: Set<Long>) {
+        if (bookIds.isEmpty()) {
+            return
+        }
+
+        if (collections.isEmpty()) {
+            //there is nothing to select from. So allow user to create a new collection right away
+            showNewCollectionDialog(bookIds)
+        } else if (childFragmentManager.findFragmentByTag(TAG_ADD_TO_COLLECTION) == null) {
+            AddToCollectionDialog.newInstance(collections, bookIds)
+                .show(childFragmentManager, TAG_ADD_TO_COLLECTION)
+        }
+    }
+
+    override fun onComicsAddedToCollection(count: Int, collectionName: String) {
+        listSelectionTracker.clearSelection()
+
+        newSnackbar(
+            resources.getQuantityString(
+                R.plurals.comic_list_comic_book_added_to_collection,
+                count,
+                count,
+                collectionName
+            )
+        ).show()
+    }
+
+    override fun onComicsRemovedFromCollection(count: Int, collectionName: String) {
+        listSelectionTracker.clearSelection()
+
+        newSnackbar(
+            resources.getQuantityString(
+                R.plurals.comic_list_comic_book_removed_from_collection,
+                count,
+                count,
+                collectionName
+            )
+        ).show()
+    }
+
+    override fun onInvalidCollectionName() {
+        newSnackbar(resources.getString(R.string.comic_list_collection_err_empty_name)).show()
+    }
+
+    override fun onCollectionChecked(dialog: ComicCollectionsDialog, collectionId: Long?) {
+        dialog.dismiss()
+
+        presenter.onCollectionSelected(collectionId)
+    }
+
+    override fun onCollectionSelectedToAdd(bookIds: Set<Long>, collectionId: Long) {
+        presenter.addToCollection(bookIds, collectionId)
+    }
+
+    override fun onNewCollectionRequested(bookIds: Set<Long>) {
+        showNewCollectionDialog(bookIds)
+    }
+
+    override fun onAddToCollectionCanceled() {
+        listSelectionTracker.clearSelection()
+    }
+
+    override fun onNewCollectionNamed(bookIds: Set<Long>, name: String) {
+        presenter.addToNewCollection(bookIds, name)
+    }
+
+    override fun onNewCollectionCanceled() {
+        listSelectionTracker.clearSelection()
+    }
+
     override fun onSortChecked(dialog: ComicsSortDialog, sort: QuerySort) {
         dialog.dismiss()
 
@@ -745,6 +926,17 @@ class ComicsListFragment(
         allListTypes.remove().also { allListTypes.addLast(it) }
 
         currentListType = allListTypes.first
+    }
+
+    /**
+     * Show a dialog where user can type a name of a new collection
+     * @param bookIds comic book ids which should be added into the new collection
+     */
+    private fun showNewCollectionDialog(bookIds: Set<Long>) {
+        if (childFragmentManager.findFragmentByTag(TAG_NEW_COLLECTION) == null) {
+            NewCollectionDialog.newInstance(bookIds)
+                .show(childFragmentManager, TAG_NEW_COLLECTION)
+        }
     }
 
     /**
@@ -832,6 +1024,9 @@ class ComicsListFragment(
         private const val TAG_INFO = "info"
         private const val TAG_EDIT_FILTERS = "edit_filters"
         private const val TAG_ADD_MODE_SELECTOR = "add_mode_selector"
+        private const val TAG_COLLECTIONS = "collections"
+        private const val TAG_ADD_TO_COLLECTION = "add_to_collection"
+        private const val TAG_NEW_COLLECTION = "new_collection"
 
         /**
          * Trying to find the better place to a [Snackbar]

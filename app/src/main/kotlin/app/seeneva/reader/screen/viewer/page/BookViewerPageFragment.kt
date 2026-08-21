@@ -54,6 +54,7 @@ import app.seeneva.reader.extension.*
 import app.seeneva.reader.logic.entity.Direction
 import app.seeneva.reader.presenter.PresenterStatefulView
 import app.seeneva.reader.screen.viewer.page.entity.PageObjectDirection
+import app.seeneva.reader.screen.viewer.page.entity.SelectedPageObject
 import com.davemorrissey.labs.subscaleview.ImageViewState
 import com.google.android.material.snackbar.Snackbar
 import kotlinx.coroutines.*
@@ -80,7 +81,9 @@ class BookViewerPageFragment :
 
     private val presenter by lifecycleScope.autoInit<BookViewerPagePresenter>()
 
-    private val callback by lazy { scope.getOrNull<Callback>() }
+    private val callback by lazy {
+        (parentFragment as? Callback) ?: scope.getOrNull<Callback>()
+    }
 
     private val viewer by lazy {
         PageViewer(
@@ -98,6 +101,13 @@ class BookViewerPageFragment :
             get(),
         )
     }
+
+    /**
+     * Currently configured assisted reading bubble/balloon zoom scale, see
+     * [app.seeneva.reader.logic.entity.configuration.ViewerConfig.assistedBubbleZoomScale]
+     */
+    private val bubbleZoomScaleXY: Float
+        get() = presenter.configState.value.assistedBubbleZoomScale
 
     /**
      * Return help fragment instance if it was already showed
@@ -128,15 +138,31 @@ class BookViewerPageFragment :
             override fun onSingleTapConfirmed(e: MotionEvent): Boolean {
                 if (isHideObjectBalloonTap(e)) {
                     //this is a zone to hide object
-                    hideCurrentPageObject()
+                    callback?.onPageObjectDismissRequested() ?: hideCurrentPageObject()
                 } else {
-                    //otherwise we should show new object depends on tap X position
+                    //first check if user tapped directly on a bubble/balloon - if so show it
+                    //right away instead of just navigating to the next/previous object
+                    val (x, y) = viewBinding.scaleImageView.viewToSourceCoord(e.x, e.y, point)!!
 
-                    val objectDirection =
-                        requireNotNull(presenter.readDirectionState.value) { "Read direction is null" }
-                            .nextObjectDirectionTap(e)
+                    val directObject = presenter.selectPageObjectAt(x, y)
 
-                    showNextPageObject(objectDirection)
+                    if (directObject != null) {
+                        showPageObject(directObject)
+                        callback?.onPageObjectSelected(pageId)
+                    } else {
+                        //otherwise we should show new object depends on tap X position
+                        val readDirection =
+                            requireNotNull(presenter.readDirectionState.value) {
+                                "Read direction is null"
+                            }
+                        val objectDirection = readDirection.nextObjectDirectionTap(e)
+
+                        callback?.onPageObjectNavigationRequested(
+                            pageId,
+                            objectDirection,
+                            readDirection
+                        ) ?: showNextPageObject(objectDirection)
+                    }
                 }
 
                 return true
@@ -168,11 +194,16 @@ class BookViewerPageFragment :
 
                 if (actionPerformed) {
                     requireView().performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
+                } else {
+                    callback?.onToolbarRequested()
                 }
             }
 
             private fun isHideObjectBalloonTap(e: MotionEvent): Boolean {
-                return e.x in hideArea
+                return callback?.isPageObjectDismissTap(
+                    pageId,
+                    e.x / requireView().width
+                ) ?: (e.x in hideArea)
             }
 
             private fun Direction.nextObjectDirectionTap(e: MotionEvent) =
@@ -380,7 +411,11 @@ class BookViewerPageFragment :
 
                             //show restored object
                             if (obj != null) {
-                                objectImageHelper.showPageObject(obj, animate = false)
+                                objectImageHelper.showPageObject(
+                                    obj,
+                                    scaleXY = bubbleZoomScaleXY,
+                                    animate = false
+                                )
                             }
                         }
                     }
@@ -432,28 +467,38 @@ class BookViewerPageFragment :
      * Show next comic book page object if any
      * @param objectDirection
      */
-    private fun showNextPageObject(objectDirection: PageObjectDirection) {
+    fun showNextPageObject(objectDirection: PageObjectDirection): Boolean {
         val objData = presenter.nextPageObject(objectDirection)
 
-        if (objData != null) {
-            objectImageHelper.showPageObject(objData)
-
-            requireView().performHapticFeedback(
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1) {
-                    HapticFeedbackConstants.VIRTUAL_KEY_RELEASE
-                } else {
-                    HapticFeedbackConstants.VIRTUAL_KEY
-                }
-            )
+        return if (objData != null) {
+            showPageObject(objData)
+            true
         } else {
-            callback?.lastObjectViewed(pageId, objectDirection)
+            false
         }
+    }
+
+    /**
+     * Show provided comic book page object applying the currently configured assisted reading
+     * bubble/balloon zoom scale
+     * @param objData page object to show
+     */
+    private fun showPageObject(objData: SelectedPageObject) {
+        objectImageHelper.showPageObject(objData, scaleXY = bubbleZoomScaleXY)
+
+        requireView().performHapticFeedback(
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1) {
+                HapticFeedbackConstants.VIRTUAL_KEY_RELEASE
+            } else {
+                HapticFeedbackConstants.VIRTUAL_KEY
+            }
+        )
     }
 
     /**
      * Hide current visible page object if any
      */
-    private fun hideCurrentPageObject() {
+    fun hideCurrentPageObject() {
         objectImageHelper.hidePageObject()
     }
 
@@ -626,11 +671,33 @@ class BookViewerPageFragment :
 
     interface Callback {
         /**
-         * Called than last object on the page was viewed
-         * @param pageId current page id
-         * @param direction object read direction
+         * Request assisted navigation across the containing spread.
          */
-        fun lastObjectViewed(pageId: Long, direction: PageObjectDirection)
+        fun onPageObjectNavigationRequested(
+            pageId: Long,
+            direction: PageObjectDirection,
+            readDirection: Direction
+        )
+
+        /**
+         * A bubble was selected directly on this page.
+         */
+        fun onPageObjectSelected(pageId: Long)
+
+        /**
+         * Whether this tap is in the containing spread's center dismissal zone.
+         */
+        fun isPageObjectDismissTap(pageId: Long, xFraction: Float): Boolean
+
+        /**
+         * Hide the active bubble across the whole spread.
+         */
+        fun onPageObjectDismissRequested()
+
+        /**
+         * Empty page space was long-pressed.
+         */
+        fun onToolbarRequested()
     }
 
     /**

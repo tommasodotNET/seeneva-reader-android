@@ -22,6 +22,7 @@ import android.animation.PropertyValuesHolder
 import android.animation.ValueAnimator
 import android.content.Context
 import android.content.Intent
+import android.content.res.Configuration
 import android.graphics.Rect
 import android.os.Bundle
 import android.view.*
@@ -54,8 +55,8 @@ import app.seeneva.reader.logic.entity.configuration.ViewerConfig
 import app.seeneva.reader.logic.entity.configuration.applyToWindow
 import app.seeneva.reader.presenter.PresenterStatefulView
 import app.seeneva.reader.screen.viewer.dialog.config.ViewerConfigDialog
-import app.seeneva.reader.screen.viewer.page.BookViewerPageFragment
-import app.seeneva.reader.screen.viewer.page.BookViewerPageFragment.Companion.pageId
+import app.seeneva.reader.screen.viewer.page.BookViewerSpreadFragment
+import app.seeneva.reader.screen.viewer.page.BookViewerSpreadFragment.Companion.spreadId
 import app.seeneva.reader.screen.viewer.page.entity.PageObjectDirection
 import com.google.android.material.snackbar.Snackbar
 import kotlinx.coroutines.*
@@ -112,7 +113,7 @@ interface BookViewerView : PresenterStatefulView {
 class BookViewerActivity :
     AppCompatActivity(R.layout.activity_book_viewer),
     BookViewerView,
-    BookViewerPageFragment.Callback,
+    BookViewerSpreadFragment.Callback,
     KoinScopeComponent {
     private val viewBinding by viewBinding(ActivityBookViewerBinding::bind)
 
@@ -147,12 +148,23 @@ class BookViewerActivity :
         )
     }
 
+    /**
+     * Should pages be grouped into two-page landscape spreads.
+     *
+     * The Activity is fully recreated on rotation (no `android:configChanges` declared), so this
+     * only ever needs to be computed once per Activity instance
+     */
+    private val pairedPages
+        get() = resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
+
     private val viewerPager by lazy {
         ViewerPager(
             viewBinding.pagesPager,
-            BookViewerAdapter(this),
+            BookViewerAdapter(this, pairedPages),
         )
     }
+
+    private var restoredPagePosition: Int? = null
 
     private var viewState by Delegates.observable(ViewState.LOADING) { _, _, newState ->
         invalidateOptionsMenu()
@@ -193,8 +205,9 @@ class BookViewerActivity :
             coroutineContext = lifecycle.coroutineScope.coroutineContext,
             callback = object : BookViewerPreviewAdapter.Callback {
                 override fun onPageClick(pos: Int) {
-                    if (viewerPager.currentItem != pos) {
-                        viewerPager.setCurrentItem(pos, true)
+                    val itemPosition = viewerPager.itemPositionOfPage(pos)
+                    if (viewerPager.currentItem != itemPosition) {
+                        viewerPager.setCurrentItem(itemPosition, true)
                         systemUiManager.showState(SystemUiState.HIDDEN)
                     }
                 }
@@ -269,23 +282,31 @@ class BookViewerActivity :
     private val pagesChangeCallback = object : ViewPager2.OnPageChangeCallback() {
         override fun onPageSelected(position: Int) {
             super.onPageSelected(position)
-            //move preview pages to the current selected page
-            viewBinding.pagesPreviewList.smoothScrollToPosition(position)
 
-            pagesPreviewAdapter.selectedPage = position
+            // translate the spread (adapter item) index into the original page index/count so
+            // progress, thumbnails and the page counter always operate on original page positions
+            val pagePosition = viewerPager.pagePositionOfItem(position)
+            val previewPositions =
+                pagePosition until (pagePosition + viewerPager.itemPageCount(position))
+
+            //move preview pages to the current selected page
+            viewBinding.pagesPreviewList.smoothScrollToPosition(pagePosition)
+
+            pagesPreviewAdapter.selectedPages = previewPositions.toSet()
 
             requireActionBar().subtitle = getString(
                 R.string.viewer_preview_page_counter,
-                position + 1,
-                viewerPager.count
+                pagePosition + 1,
+                pagesPreviewAdapter.itemCount
             )
 
-            presenter.onPageChange(position)
+            presenter.onPageChange(pagePosition)
 
             for (fragment in supportFragmentManager.fragments) {
-                if (fragment is BookViewerPageFragment) {
-                    //reset read state for all pages which is not currently visible page
-                    if (fragment.pageId != viewerPager.currentItemId) {
+                if (fragment is BookViewerSpreadFragment) {
+                    //reset read state for all spreads which are not the currently visible one.
+                    //Both pages of the currently visible spread are kept intact this way
+                    if (fragment.spreadId != viewerPager.currentItemId) {
                         fragment.reset()
                     }
                 }
@@ -325,7 +346,7 @@ class BookViewerActivity :
                 true
             }
             R.id.set_cover -> {
-                presenter.setPageAsCover(viewerPager.currentItem)
+                presenter.setPageAsCover(viewerPager.pagePositionOfItem(viewerPager.currentItem))
                 true
             }
             R.id.swap_horizontally -> {
@@ -338,6 +359,10 @@ class BookViewerActivity :
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        restoredPagePosition = savedInstanceState
+            ?.takeIf { it.containsKey(STATE_PAGE_POSITION) }
+            ?.getInt(STATE_PAGE_POSITION)
+
         setSupportActionBar(viewBinding.toolbar)
         requireActionBar().setDisplayHomeAsUpEnabled(true)
 
@@ -410,11 +435,23 @@ class BookViewerActivity :
         setPagesDirection(bookDescription.direction)
 
         viewerPager.registerOnPageChangeCallback(pagesChangeCallback)
+        val pagePosition = restoredPagePosition ?: bookDescription.readPosition
+        restoredPagePosition = null
 
-        viewerPager.setCurrentItem(bookDescription.readPosition, false)
+        viewerPager.setCurrentItem(viewerPager.itemPositionOfPage(pagePosition), false)
+        // setCurrentItem does not dispatch when the requested item is already selected
+        pagesChangeCallback.onPageSelected(viewerPager.currentItem)
+    }
 
-        //needed to properly set page on preview list
-        viewBinding.pagesPreviewList.scrollToPosition(bookDescription.readPosition)
+    override fun onSaveInstanceState(outState: Bundle) {
+        if (viewState == ViewState.LOADED) {
+            outState.putInt(
+                STATE_PAGE_POSITION,
+                viewerPager.pagePositionOfItem(viewerPager.currentItem)
+            )
+        }
+
+        super.onSaveInstanceState(outState)
     }
 
     override fun onBookLoadError() {
@@ -441,7 +478,9 @@ class BookViewerActivity :
             viewerPager.reverse = reverse
             pagesPreviewLayoutManager.reverseLayout = reverse
             //reversion transaction will look smoothly
-            viewBinding.pagesPreviewList.scrollToPosition(viewerPager.currentItem)
+            viewBinding.pagesPreviewList.scrollToPosition(
+                viewerPager.pagePositionOfItem(viewerPager.currentItem)
+            )
         }
     }
 
@@ -458,8 +497,9 @@ class BookViewerActivity :
     }
 
     override fun lastObjectViewed(pageId: Long, direction: PageObjectDirection) {
-        //Check if it is called from currently visible page
-        if (pageId != viewerPager.currentItemId) {
+        //Check if it is called from a page which is a part of the currently visible spread
+        //(either of its one or two pages)
+        if (!viewerPager.isPageInCurrentSpread(pageId)) {
             return
         }
 
@@ -472,6 +512,10 @@ class BookViewerActivity :
         if (pagePosToShow in 0 until viewerPager.count) {
             viewerPager.setCurrentItem(pagePosToShow)
         }
+    }
+
+    override fun onToolbarRequested() {
+        systemUiManager.showState(SystemUiState.SHOWED)
     }
 
     /**
@@ -660,6 +704,8 @@ class BookViewerActivity :
         private const val ARG_BOOK_ID = "book_id"
 
         private const val TAG_SETTINGS = "settings"
+
+        private const val STATE_PAGE_POSITION = "page_position"
 
         /**
          * Open comic book viewer

@@ -94,7 +94,7 @@ class FiltersAdapter(private val callback: Callback) :
 
     companion object : DiffUtil.ItemCallback<FilterLabel>() {
         override fun areItemsTheSame(oldItem: FilterLabel, newItem: FilterLabel): Boolean {
-            return oldItem.groupId == newItem.groupId
+            return oldItem.id == newItem.id
         }
 
         override fun areContentsTheSame(oldItem: FilterLabel, newItem: FilterLabel): Boolean {

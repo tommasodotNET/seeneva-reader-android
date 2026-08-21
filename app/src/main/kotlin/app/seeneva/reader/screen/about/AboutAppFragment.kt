@@ -46,7 +46,7 @@ class AboutAppFragment : Fragment(R.layout.fragment_about_app) {
     private val onClickListener = View.OnClickListener {
         when (it.id) {
             R.id.about_app_web_group ->
-                viewUri(getString(R.string.about_app_web_txt).toUri())
+                viewUri(getString(R.string.about_app_releases_link).toUri())
             R.id.about_app_donate_group ->
                 viewUri(getString(R.string.about_app_donate_link).toUri())
             R.id.about_app_source_code_group ->
@@ -72,8 +72,8 @@ class AboutAppFragment : Fragment(R.layout.fragment_about_app) {
         newCard(
             R.id.about_app_web_group,
             R.drawable.ic_round_home_24,
-            R.string.about_app_web,
-            R.string.about_app_web_txt,
+            R.string.about_app_releases,
+            R.string.about_app_releases_txt,
             onClickListener
         )
 
@@ -111,12 +111,6 @@ class AboutAppFragment : Fragment(R.layout.fragment_about_app) {
             onClickListener
         )
 
-        newCard(
-            0,
-            R.drawable.ic_round_favorite_24,
-            R.string.about_app_gratitude,
-            R.string.about_app_gratitude_txt
-        )
     }
 
     private fun newCard(

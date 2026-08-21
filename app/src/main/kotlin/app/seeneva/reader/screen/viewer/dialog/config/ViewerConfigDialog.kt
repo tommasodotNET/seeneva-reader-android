@@ -108,6 +108,24 @@ class ViewerConfigDialog : BaseDraggableDialog(), ViewerConfigView, KoinScopeCom
                 formatter.format(value)
         })
 
+        viewBinding.bubbleZoomScaleSlider.apply {
+            // The inflated Slider starts at 0. Move it into the future range before raising
+            // valueFrom, otherwise Material Components can reject the first layout pass.
+            value = ViewerConfig.ASSISTED_BUBBLE_ZOOM_SCALE_MIN
+            valueFrom = ViewerConfig.ASSISTED_BUBBLE_ZOOM_SCALE_MIN
+            valueTo = ViewerConfig.ASSISTED_BUBBLE_ZOOM_SCALE_MAX
+            stepSize = ViewerConfig.ASSISTED_BUBBLE_ZOOM_SCALE_STEP
+
+            setLabelFormatter(object : LabelFormatter {
+                private val formatter: Format =
+                    NumberFormat.getPercentInstance()
+                        .apply { maximumFractionDigits = 0 }
+
+                override fun getFormattedValue(value: Float) =
+                    formatter.format(value)
+            })
+        }
+
         viewBinding.systemBrightnessSwitch.setOnCheckedChangeListener { _, isChecked ->
             viewBinding.brightnessSlider.isEnabled = !isChecked
             presenter.onSystemBrightnessChange(isChecked)
@@ -115,6 +133,11 @@ class ViewerConfigDialog : BaseDraggableDialog(), ViewerConfigView, KoinScopeCom
 
         viewLifecycleOwner.lifecycleScope.launch {
             viewBinding.brightnessSlider.userProgress().collect { presenter.onBrightnessChange(it) }
+        }
+
+        viewLifecycleOwner.lifecycleScope.launch {
+            viewBinding.bubbleZoomScaleSlider.userProgress()
+                .collect { presenter.onBubbleZoomScaleChange(it) }
         }
 
         viewLifecycleOwner.lifecycleScope.launch {
@@ -150,6 +173,11 @@ class ViewerConfigDialog : BaseDraggableDialog(), ViewerConfigView, KoinScopeCom
         viewBinding.ttsSwitch.isChecked = config.tts
 
         viewBinding.keepScreenOnSwitch.isChecked = config.keepScreenOn
+
+        viewBinding.bubbleZoomScaleSlider.value = config.assistedBubbleZoomScale.coerceIn(
+            viewBinding.bubbleZoomScaleSlider.valueFrom,
+            viewBinding.bubbleZoomScaleSlider.valueTo
+        )
 
         @SuppressLint("Range")
         if (config.systemBrightness) {

@@ -52,6 +52,8 @@ import app.seeneva.reader.logic.usecase.image.DecodePageUseCase
 import app.seeneva.reader.logic.usecase.image.DecodePageUseCaseImpl
 import app.seeneva.reader.logic.usecase.image.GetEncodedPageUseCase
 import app.seeneva.reader.logic.usecase.image.GetEncodedPageUseCaseImpl
+import app.seeneva.reader.logic.usecase.tags.ComicCollectionsUseCase
+import app.seeneva.reader.logic.usecase.tags.ComicCollectionsUseCaseImpl
 import app.seeneva.reader.logic.usecase.tags.ComicCompletedTagUseCase
 import app.seeneva.reader.logic.usecase.tags.ComicCompletedTagUseCaseImpl
 import app.seeneva.reader.logic.usecase.tags.ComicRemovedStateUseCaseImpl
@@ -191,6 +193,14 @@ object Modules {
 
         single<ComicCompletedTagUseCase> {
             ComicCompletedTagUseCaseImpl(
+                get(),
+                get(),
+                get()
+            )
+        }
+
+        single<ComicCollectionsUseCase> {
+            ComicCollectionsUseCaseImpl(
                 get(),
                 get(),
                 get()

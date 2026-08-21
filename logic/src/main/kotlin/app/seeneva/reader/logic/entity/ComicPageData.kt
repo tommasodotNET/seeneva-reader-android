@@ -79,6 +79,15 @@ data class ComicPageObjectContainer(
         objectsRTree.search(Geometries.point(x, y))
             .asSequence()
             .map { it.value() }
+
+    /**
+     * Find first object located at provided point (x, y) together with its position inside this container
+     * @param x X coordinate
+     * @param y Y coordinate
+     * @return object position and object itself, or `null` if there is no object at provided point
+     */
+    fun indexedGet(x: Float, y: Float): IndexedValue<ComicPageObject>? =
+        get(x, y).firstOrNull()?.let { obj -> IndexedValue(objects.indexOf(obj), obj) }
 }
 
 /**

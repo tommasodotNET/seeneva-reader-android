@@ -54,11 +54,13 @@ class BookViewerPreviewAdapter(
     initPages: List<ComicBookPage>? = null,
     private val callback: Callback? = null,
 ) : RecyclerView.Adapter<BookViewerPreviewAdapter.PagePreviewViewHolder>() {
-    var selectedPage by Delegates.observable(0) { _, oldPagePos, newPagePos ->
-        check(newPagePos >= 0) { "Selected page cannot be < 0" }
-
-        notifyItemChanged(oldPagePos)
-        notifyItemChanged(newPagePos)
+    /**
+     * Original page positions which should be highlighted as currently displayed - both pages of
+     * a landscape spread when applicable
+     */
+    var selectedPages: Set<Int> by Delegates.observable(emptySet()) { _, oldPages, newPages ->
+        (oldPages - newPages).forEach { notifyItemChanged(it) }
+        (newPages - oldPages).forEach { notifyItemChanged(it) }
     }
 
     private val inflater = LayoutInflater.from(context)
@@ -82,7 +84,7 @@ class BookViewerPreviewAdapter(
         )
 
     override fun onBindViewHolder(holder: PagePreviewViewHolder, position: Int) {
-        holder.bind(getPage(position), selectedPage == position)
+        holder.bind(getPage(position), position in selectedPages)
     }
 
     override fun onViewRecycled(holder: PagePreviewViewHolder) {

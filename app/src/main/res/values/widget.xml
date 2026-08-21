@@ -38,7 +38,7 @@
     </style>
 
     <style name="AppOverlay.Slider" parent="">
-        <item name="colorPrimary">@color/deep_purple_400</item>
+        <item name="colorPrimary">@color/panels_red</item>
     </style>
 
     <style name="AppWidget.BottomSheet" parent="Widget.MaterialComponents.BottomSheet.Modal" />

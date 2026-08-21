@@ -29,7 +29,7 @@ import app.seeneva.reader.logic.entity.ComicListItem
 import app.seeneva.reader.logic.entity.TagType
 import app.seeneva.reader.logic.entity.query.QueryParams
 import app.seeneva.reader.logic.entity.query.QueryParamsResolver
-import app.seeneva.reader.logic.entity.query.addDefaultFilters
+import app.seeneva.reader.logic.entity.query.collectionFilters
 import app.seeneva.reader.logic.extension.getHardcodedTagId
 import app.seeneva.reader.logic.extension.hasTag
 import app.seeneva.reader.logic.mapper.ComicMetadataIntoComicListItem
@@ -38,17 +38,25 @@ import app.seeneva.reader.data.source.local.db.query.QueryParams as DataQueryPar
 internal interface ComicsPageUseCase {
     /**
      * Get count of comic books to which [params] are applicable
+     * @param params request params
+     * @param collectionId id of the active comic book collection (user tag) or null
      * @return comic books count
      */
-    suspend fun count(params: QueryParams): Long
+    suspend fun count(params: QueryParams, collectionId: Long? = null): Long
 
     /**
      * Get single comic books page data
      * @param start start index
      * @param count requested size of the page
      * @param params request params
+     * @param collectionId id of the active comic book collection (user tag) or null
      */
-    suspend fun getPage(start: Int, count: Int, params: QueryParams): List<ComicListItem>
+    suspend fun getPage(
+        start: Int,
+        count: Int,
+        params: QueryParams,
+        collectionId: Long? = null
+    ): List<ComicListItem>
 }
 
 internal class ComicsPageUseCaseImpl(
@@ -59,15 +67,20 @@ internal class ComicsPageUseCaseImpl(
     private val mapper: ComicMetadataIntoComicListItem,
     override val dispatchers: Dispatchers,
 ) : ComicsPageUseCase, Dispatched {
-    override suspend fun count(params: QueryParams) =
+    override suspend fun count(params: QueryParams, collectionId: Long?) =
         comicBookSource.count(
             queryParamsResolver.resolveCount(
                 params,
-                QueryParamsResolver.FiltersEditor::addDefaultFilters
+                collectionFilters(collectionId)
             )
         )
 
-    override suspend fun getPage(start: Int, count: Int, params: QueryParams): List<ComicListItem> {
+    override suspend fun getPage(
+        start: Int,
+        count: Int,
+        params: QueryParams,
+        collectionId: Long?
+    ): List<ComicListItem> {
         fun SimpleComicBookWithTags.hasTagInner(id: Long?): Boolean {
             return id?.let { hasTag(it) } ?: false
         }
@@ -76,7 +89,8 @@ internal class ComicsPageUseCaseImpl(
             val completedTagId = comicTagSource.getHardcodedTagId(TagType.TYPE_COMPLETED)
             val corruptedTagId = comicTagSource.getHardcodedTagId(TagType.TYPE_CORRUPTED)
 
-            val page = comicBookSource.querySimpleWithTags(params.resolve(start, count))
+            val page =
+                comicBookSource.querySimpleWithTags(params.resolve(start, count, collectionId))
 
             io {
                 page.map {
@@ -86,11 +100,15 @@ internal class ComicsPageUseCaseImpl(
         }
     }
 
-    private suspend fun QueryParams.resolve(start: Int, count: Int): DataQueryParams =
+    private suspend fun QueryParams.resolve(
+        start: Int,
+        count: Int,
+        collectionId: Long?
+    ): DataQueryParams =
         queryParamsResolver.resolve(
             this,
             start,
             count,
-            edit = QueryParamsResolver.FiltersEditor::addDefaultFilters
+            edit = collectionFilters(collectionId)
         )
 }

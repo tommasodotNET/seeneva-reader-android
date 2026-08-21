@@ -17,5 +17,5 @@
   -->
 
 <resources xmlns:tools="http://schemas.android.com/tools" tools:locale="en">
-    <string name="app_name" translatable="false">Seeneva-dev</string>
+    <string name="app_name" translatable="false">Panels-dev</string>
 </resources>

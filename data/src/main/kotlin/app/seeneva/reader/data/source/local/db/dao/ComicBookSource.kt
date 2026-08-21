@@ -37,8 +37,26 @@ import kotlinx.coroutines.flow.map
 import java.time.Instant
 import kotlin.coroutines.coroutineContext
 
+data class ComicBookCover(
+    @ColumnInfo(name = "file_path")
+    val filePath: Uri,
+    @ColumnInfo(name = "cover_position")
+    val coverPosition: Long
+)
+
 @Dao
 abstract class ComicBookSource internal constructor(private val database: ComicDatabase) {
+    /**
+     * Find a deterministic representative book cover for a collection.
+     */
+    @Query(
+        "SELECT comic_book.file_path, comic_book.cover_position FROM comic_book " +
+                "INNER JOIN tagged_comic_book ON comic_book.id = tagged_comic_book.book_id " +
+                "WHERE tagged_comic_book.tag_id = :tagId " +
+                "ORDER BY comic_book.display_name COLLATE NOCASE ASC, comic_book.id ASC LIMIT 1"
+    )
+    abstract suspend fun findFirstCoverByTag(tagId: Long): ComicBookCover?
+
     /**
      * Insert or replace comic books into database
      * @param comicBooks comic books to insert
@@ -507,4 +525,3 @@ abstract class ComicBookSource internal constructor(private val database: ComicD
         """
     }
 }
-

@@ -28,6 +28,7 @@ import app.seeneva.reader.logic.ComicListViewType
 import app.seeneva.reader.logic.ComicsSettings
 import app.seeneva.reader.logic.comic.AddComicBookMode
 import app.seeneva.reader.logic.comic.Library
+import app.seeneva.reader.logic.entity.ComicCollection
 import app.seeneva.reader.logic.entity.query.QueryParams
 import app.seeneva.reader.logic.entity.query.QuerySort
 import app.seeneva.reader.logic.entity.query.filter.Filter
@@ -42,7 +43,14 @@ import org.tinylog.kotlin.Logger
 interface ComicsListPresenter : Presenter {
     val pagingState: StateFlow<ComicsPagingState>
 
+    val collections: StateFlow<List<ComicCollection>>
+
     val currentSearchQuery: String?
+
+    /**
+     * Currently active comic book collection or null if all comic books are showed
+     */
+    val activeCollection: StateFlow<ComicCollection?>
 
     /**
      * Load comic book paging data
@@ -111,6 +119,44 @@ interface ComicsListPresenter : Presenter {
     fun onListTypeChanged(listType: ComicListViewType)
 
     /**
+     * User click on collections filter button
+     */
+    fun onCollectionsClick()
+
+    /**
+     * User selected a collection to filter the comic book list
+     * @param collectionId id of the selected collection or null to show all comic books
+     */
+    fun onCollectionSelected(collectionId: Long?)
+
+    /**
+     * User wants to add comic books into a collection
+     * @param ids comic book ids to add
+     */
+    fun onAddToCollectionClick(ids: Set<Long>)
+
+    /**
+     * User selected an existed collection to add comic books into
+     * @param ids comic book ids to add
+     * @param collectionId target collection id
+     */
+    fun addToCollection(ids: Set<Long>, collectionId: Long)
+
+    /**
+     * User typed a name of a collection to add comic books into.
+     * Collection will be created if it doesn't exist yet
+     * @param ids comic book ids to add
+     * @param name name of the target collection
+     */
+    fun addToNewCollection(ids: Set<Long>, name: String)
+
+    /**
+     * Remove comic books from the currently active collection
+     * @param ids comic book ids to remove
+     */
+    fun removeFromActiveCollection(ids: Set<Long>)
+
+    /**
      * Add provided comic books
      * @param mode adding mode
      * @param paths comic book paths
@@ -132,6 +178,9 @@ class ComicsListPresenterImpl(
     override val pagingState: StateFlow<ComicsPagingState>
         get() = viewModel.pagingState
 
+    override val collections: StateFlow<List<ComicCollection>>
+        get() = viewModel.collections
+
     private var queryParams: QueryParams
         get() = viewModel.queryParams
         set(newQueryParams) {
@@ -145,12 +194,20 @@ class ComicsListPresenterImpl(
     override val currentSearchQuery: String?
         get() = queryParams.titleQuery
 
+    override val activeCollection: StateFlow<ComicCollection?>
+        get() = viewModel.activeCollection
+
     init {
         viewModel.eventsFlow
             .observe(view) {
                 when (val content = it) {
                     is ComicsMarkedAsRemoved -> view.onComicsMarkedRemoved(content.ids)
                     is ComicsOpened -> view.onComicAdded(content.result)
+                    is ComicsAddedToCollection ->
+                        view.onComicsAddedToCollection(content.count, content.collectionName)
+                    is ComicsRemovedFromCollection ->
+                        view.onComicsRemovedFromCollection(content.count, content.collectionName)
+                    InvalidCollectionName -> view.onInvalidCollectionName()
                 }
             }
 
@@ -167,11 +224,16 @@ class ComicsListPresenterImpl(
                 }
             }
 
+        viewModel.activeCollection
+            .observe(view) { showFilters(queryParams) }
+
         presenterScope.launch {
             view.whenStarted {
                 showFilters(queryParams)
             }
         }
+
+        viewModel.loadCollections()
     }
 
     override fun onCreate(state: Bundle?) {
@@ -264,10 +326,52 @@ class ComicsListPresenterImpl(
         viewModel.add(paths, mode, flags)
     }
 
+    override fun onCollectionsClick() {
+        //always load fresh collections before showing a picker
+        presenterScope.launch {
+            view.showCollectionsPicker(viewModel.awaitCollections(), activeCollection.value?.id)
+        }
+    }
+
+    override fun onCollectionSelected(collectionId: Long?) {
+        viewModel.setActiveCollection(collectionId)
+    }
+
+    override fun onAddToCollectionClick(ids: Set<Long>) {
+        if (ids.isEmpty()) {
+            return
+        }
+
+        presenterScope.launch {
+            view.showAddToCollection(viewModel.awaitCollections(), ids)
+        }
+    }
+
+    override fun addToCollection(ids: Set<Long>, collectionId: Long) {
+        viewModel.addToCollection(ids, collectionId)
+    }
+
+    override fun addToNewCollection(ids: Set<Long>, name: String) {
+        viewModel.addToNewCollection(ids, name)
+    }
+
+    override fun removeFromActiveCollection(ids: Set<Long>) {
+        val activeCollectionId = activeCollection.value?.id ?: return
+
+        viewModel.removeFromCollection(ids, activeCollectionId)
+    }
+
     private fun showFilters(queryParams: QueryParams) {
-        view.showFilters(queryParams.filters.map { (groupId, filter) ->
-            FilterLabel(groupId, filter.title)
-        })
+        val filterLabels = queryParams.filters.map { (groupId, filter) ->
+            FilterLabel(FilterLabel.Id.Group(groupId), filter.title)
+        }
+
+        view.showFilters(
+            when (val collection = activeCollection.value) {
+                null -> filterLabels
+                else -> filterLabels + FilterLabel(FilterLabel.Id.Collection, collection.name)
+            }
+        )
     }
 
     private companion object {

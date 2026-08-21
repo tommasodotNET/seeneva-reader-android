@@ -16,7 +16,7 @@
   ~  You should have received a copy of the GNU General Public License
   ~  along with this program.  If not, see <https://www.gnu.org/licenses/>.
   --><resources xmlns:tools="http://schemas.android.com/tools" tools:locale="en">
-    <string name="app_name" translatable="false">Seeneva</string>
+    <string name="app_name" translatable="false">Panels</string>
     <string name="all_ok">OK</string>
     <string name="all_cancel">Cancel</string>
     <string name="search">Search</string>
@@ -45,6 +45,23 @@
     <string name="comic_list_error_view_non_existed">Oops. Comic book cannot be found 😨</string>
     <string name="comic_list_search_hint">Title</string>
     <string name="comic_list_edit_title">New title</string>
+    <string name="comic_list_collections">Collections</string>
+    <string name="comic_list_collections_all">All books</string>
+    <string name="comic_list_collections_empty">You have no collections yet</string>
+    <string name="comic_list_collection_add">Add to collection</string>
+    <string name="comic_list_collection_remove">Remove from collection</string>
+    <string name="comic_list_collection_new">New collection…</string>
+    <string name="comic_list_collection_new_title">New collection</string>
+    <string name="comic_list_collection_name_hint">Collection name</string>
+    <string name="comic_list_collection_err_empty_name">Cannot be empty</string>
+    <plurals name="comic_list_comic_book_added_to_collection">
+        <item quantity="one">Comics was added to \'%2$s\'</item>
+        <item quantity="other">%1$d comics were added to \'%2$s\'</item>
+    </plurals>
+    <plurals name="comic_list_comic_book_removed_from_collection">
+        <item quantity="one">Comics was removed from \'%2$s\'</item>
+        <item quantity="other">%1$d comics were removed from \'%2$s\'</item>
+    </plurals>
     <plurals name="comic_list_comic_book_removed">
         <item quantity="one">Comics was removed</item>
         <item quantity="other">%1$d comics were removed</item>
@@ -122,6 +139,7 @@
     <string name="viewer_settings_keep_screen_on">Keep screen on</string>
     <string name="viewer_settings_system_brightness">System brightness</string>
     <string name="viewer_settings_tts">Text-to-speech (English only)</string>
+    <string name="viewer_settings_bubble_zoom_scale">Assisted reading bubble zoom</string>
     <string name="viewer_tts_error_title">TTS not available</string>
     <string name="viewer_tts_error_not_installed">Please install any available text-to-speech engine on the device and configure \‘%1$s\’ language.</string>
     <string name="viewer_tts_error_language">Please install \‘%1$s\’ language for the selected TTS engine.</string>
@@ -134,11 +152,14 @@
     <string name="third_parties_homepage">Homepage</string>
     <string name="third_parties_summary">Summary</string>
     <string name="about_app_name" translatable="false">%1$s, %2$s</string>
-    <string name="about_app_copyright" translatable="false">Copyright © 2021-2023 Sergei Solodovnikov</string>
-    <string name="about_app_description">%1$s is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version.</string>
+    <string name="about_app_copyright" translatable="false">Copyright © 2021–2023 Sergei Solodovnikov\nPanels fork © 2026 Tommaso Stocchi</string>
+    <string name="about_app_description">%1$s is a personal fork of the Seeneva comic reader. It is free software that you can redistribute and modify under the GNU General Public License version 3 or later.</string>
     <string name="about_app_source_code">Source code</string>
     <string name="about_app_source_code_txt">View app repository</string>
-    <string name="about_app_source_code_link" translatable="false">https://github.com/Seeneva/seeneva-reader-android</string>
+    <string name="about_app_source_code_link" translatable="false">https://github.com/tommasodotNET/seeneva-reader-android</string>
+    <string name="about_app_releases">Releases</string>
+    <string name="about_app_releases_txt">Download Panels updates</string>
+    <string name="about_app_releases_link" translatable="false">https://github.com/tommasodotNET/seeneva-reader-android/releases</string>
     <string name="about_app_donate">Donate</string>
     <string name="about_app_donate_txt">Support the developer</string>
     <string name="about_app_donate_link" translatable="false">https://seeneva.app/#donate</string>

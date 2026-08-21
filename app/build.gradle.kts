@@ -65,7 +65,7 @@ android {
     }
 
     defaultConfig {
-        applicationId = "app.seeneva.reader"
+        applicationId = "app.panels.reader"
         namespace = "app.seeneva.reader"
         // allow to set app id suffix from properties. It is required by CI.
         applicationIdSuffix =
@@ -123,7 +123,7 @@ android {
         register(AppStoreFlavor.GITHUB) {
             dimension = AppStoreFlavor.NAME
 
-            versionNameSuffix = "-gh"
+            enableShowDonate(false)
         }
     }
 
@@ -229,7 +229,7 @@ fun configureOutputName(variant: ApplicationVariant) {
             val outputFilters = filters
 
             outputFileName = buildString {
-                append("seeneva-${variant.versionName}")
+                append("panels-${variant.versionName}")
 
                 if (abiSplitEnabled) {
                     append('-')

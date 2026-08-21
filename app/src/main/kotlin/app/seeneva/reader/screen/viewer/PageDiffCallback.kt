@@ -20,11 +20,20 @@ package app.seeneva.reader.screen.viewer
 
 import androidx.recyclerview.widget.DiffUtil
 import app.seeneva.reader.logic.entity.ComicBookPage
+import app.seeneva.reader.screen.viewer.entity.PageSpread
 
 class PageDiffCallback : DiffUtil.ItemCallback<ComicBookPage>() {
     override fun areItemsTheSame(oldItem: ComicBookPage, newItem: ComicBookPage) =
         oldItem.id == newItem.id
 
     override fun areContentsTheSame(oldItem: ComicBookPage, newItem: ComicBookPage) =
+        oldItem == newItem
+}
+
+class PageSpreadDiffCallback : DiffUtil.ItemCallback<PageSpread>() {
+    override fun areItemsTheSame(oldItem: PageSpread, newItem: PageSpread) =
+        oldItem.id == newItem.id
+
+    override fun areContentsTheSame(oldItem: PageSpread, newItem: PageSpread) =
         oldItem == newItem
 }

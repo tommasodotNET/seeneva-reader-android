@@ -20,4 +20,25 @@ package app.seeneva.reader.screen.list.entity
 
 import app.seeneva.reader.logic.entity.query.filter.FilterGroup
 
-data class FilterLabel(val groupId: FilterGroup.ID, val title: String)
+/**
+ * Label of an applied comic book list filter
+ * @param id id of the label
+ * @param title human readable label title
+ */
+data class FilterLabel(val id: Id, val title: String) {
+    /**
+     * Id of a [FilterLabel]
+     */
+    sealed interface Id {
+        /**
+         * Label of a filter from a filter group
+         * @param groupId id of the filter group
+         */
+        data class Group(val groupId: FilterGroup.ID) : Id
+
+        /**
+         * Label of the currently active comic book collection
+         */
+        object Collection : Id
+    }
+}

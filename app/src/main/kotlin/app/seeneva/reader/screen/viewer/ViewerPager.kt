@@ -90,10 +90,35 @@ class ViewerPager(
         get() = adapter.getItemId(pager.currentItem)
 
     /**
-     * How many pages in the adapter
+     * How many pages (spreads) in the adapter
      */
     val count
         get() = adapter.itemCount
+
+    /**
+     * @param pageId original comic book page id
+     * @return `true` if a page with provided [pageId] is a part of the currently displayed spread
+     */
+    fun isPageInCurrentSpread(pageId: Long) =
+        adapter.getSpread(pager.currentItem).contains(pageId)
+
+    /**
+     * @param pagePosition original page position (an index into the pages list provided to [setPages])
+     * @return index of the item (spread) which contains that page. Can be used with [setCurrentItem]
+     */
+    fun itemPositionOfPage(pagePosition: Int) = adapter.spreadIndexOfPage(pagePosition)
+
+    /**
+     * @param position item (spread) index, see [currentItem]
+     * @return original position of the first (lowest indexed) page inside that spread
+     */
+    fun pagePositionOfItem(position: Int) = adapter.pagePositionOfSpread(position)
+
+    /**
+     * @param position item (spread) index, see [currentItem]
+     * @return how many original pages are displayed together at that item (1 or 2)
+     */
+    fun itemPageCount(position: Int) = adapter.spreadPageCount(position)
 
     init {
         // Change pager fling velocity
