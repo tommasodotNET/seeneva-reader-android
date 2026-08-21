@@ -1,5 +1,5 @@
 name: Prepare environment
-description: Prepare required environment be the Seeneva project
+description: Prepare the environment required to build Panels
 
 runs:
   using: composite
@@ -8,17 +8,11 @@ runs:
       shell: bash
       run: sudo apt-get update && sudo apt-get install --yes autoconf automake gettext libtool
 
-    - name: Setup asdf
-      uses: asdf-vm/actions/setup@v3.0.2
-
-    - name: Install asdf plugins
-      uses: asdf-vm/actions/plugins-add@v3.0.2
-
     - name: Setup required Java
-      shell: bash
-      run: |
-        asdf install java &&
-        echo "JAVA_HOME=$(asdf where java)" >> "$GITHUB_ENV"
+      uses: actions/setup-java@v4
+      with:
+        distribution: temurin
+        java-version: "17"
 
     - name: Setup required Ruby
       uses: ruby/setup-ruby@v1
