@@ -16,7 +16,8 @@ runs:
 
     - name: Install required Android CMake
       shell: bash
-      run: "$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager" "cmake;3.10.2.4988404"
+      run: |
+        "$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager" "cmake;3.10.2.4988404"
 
     - name: Setup required Ruby
       uses: ruby/setup-ruby@v1
