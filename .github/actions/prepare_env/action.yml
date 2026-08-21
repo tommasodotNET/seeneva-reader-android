@@ -6,7 +6,18 @@ runs:
   steps:
     - name: Install packages
       shell: bash
-      run: sudo apt-get update && sudo apt-get install --yes autoconf automake autopoint gettext libtool
+      run: |
+        sudo apt-get update
+        sudo apt-get install --yes \
+          autoconf \
+          automake \
+          autopoint \
+          build-essential \
+          cmake \
+          gettext \
+          libtool \
+          ninja-build \
+          pkg-config
 
     - name: Setup required Java
       uses: actions/setup-java@v5
@@ -18,6 +29,18 @@ runs:
       shell: bash
       run: |
         "$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager" "cmake;3.10.2.4988404"
+
+    - name: Verify native build tools
+      shell: bash
+      run: |
+        test -x /usr/bin/cmake
+        test -x "$ANDROID_SDK_ROOT/cmake/3.10.2.4988404/bin/cmake"
+        command -v autoreconf
+        command -v autopoint
+        command -v make
+        command -v ninja
+        command -v pkg-config
+        /usr/bin/cmake --version
 
     - name: Setup required Ruby
       uses: ruby/setup-ruby@v1
