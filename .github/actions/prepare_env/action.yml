@@ -9,10 +9,14 @@ runs:
       run: sudo apt-get update && sudo apt-get install --yes autoconf automake gettext libtool
 
     - name: Setup required Java
-      uses: actions/setup-java@v4
+      uses: actions/setup-java@v5
       with:
         distribution: temurin
         java-version: "17"
+
+    - name: Install required Android CMake
+      shell: bash
+      run: sdkmanager "cmake;3.10.2.4988404"
 
     - name: Setup required Ruby
       uses: ruby/setup-ruby@v1
