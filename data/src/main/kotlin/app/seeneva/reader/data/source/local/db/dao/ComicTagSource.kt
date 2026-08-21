@@ -41,6 +41,50 @@ interface ComicTagSource {
     suspend fun findByType(type: Int): ComicTag?
 
     /**
+     * Find all comic book tags by it [type]
+     * @param type comic book tag type
+     * @return all tags of the provided type sorted by name (case insensitive)
+     */
+    @Query(
+        """
+        SELECT * FROM ${ComicTag.TABLE_NAME}
+        WHERE ${ComicTag.COLUMN_TYPE} = :type
+        ORDER BY ${ComicTag.COLUMN_NAME} COLLATE NOCASE
+    """
+    )
+    suspend fun findAllByType(type: Int): List<ComicTag>
+
+    /**
+     * Try to find a comic book tag by it [type] and [name]. Name comparison is case insensitive
+     * @param type comic book tag type
+     * @param name comic book tag name
+     * @return comic book tag if it exists
+     */
+    @Query(
+        """
+        SELECT * FROM ${ComicTag.TABLE_NAME}
+        WHERE ${ComicTag.COLUMN_TYPE} = :type AND ${ComicTag.COLUMN_NAME} = :name COLLATE NOCASE
+        LIMIT 1
+    """
+    )
+    suspend fun findByTypeAndName(type: Int, name: String): ComicTag?
+
+    /**
+     * Delete comic book tag by it id.
+     *
+     * Related rows in the join table will be removed by the `ON DELETE CASCADE` foreign key
+     * @param tagId comic book tag id
+     * @return count of deleted tags
+     */
+    @Query(
+        """
+        DELETE FROM ${ComicTag.TABLE_NAME}
+        WHERE ${ComicTag.COLUMN_ID} = :tagId
+    """
+    )
+    suspend fun deleteById(tagId: Long): Int
+
+    /**
      * Add or replace existed comic book tags
      * @param tags tags to insert or replace
      * @return inserted tags ids

@@ -76,7 +76,7 @@ class ObjectImageHelper(
      */
     private val error =
         context.obtainStyledAttributes(intArrayOf(MaterialR.attr.colorError))
-            .use { it.getColor(0, ContextCompat.getColor(context, R.color.red_800)) }
+            .use { it.getColor(0, ContextCompat.getColor(context, R.color.panels_red)) }
             .toDrawable()
 
     private val baseAnimator

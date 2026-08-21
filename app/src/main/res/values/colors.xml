@@ -24,6 +24,11 @@
     <color name="cerulean">#03A9F4</color>
     <color name="light_blue_800">#0073A7</color>
     <color name="deep_purple_400">#865DDD</color>
+    <color name="panels_launcher_background">#120A2A</color>
+    <color name="panels_navy">#1E2A5E</color>
+    <color name="panels_navy_dark">#120A2A</color>
+    <color name="panels_blue">#0284C7</color>
+    <color name="panels_red">#DC2626</color>
 
     <color name="grey_50">#FAFAFA</color>
     <color name="white_alpha_50">#80FFFFFF</color>

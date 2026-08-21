@@ -33,6 +33,10 @@
         app:showAsAction="ifRoom"
         tools:icon="@drawable/ic_round_view_list_24dp" />
     <item
+        android:id="@+id/collections"
+        android:title="@string/comic_list_collections"
+        app:showAsAction="never" />
+    <item
         android:id="@+id/sort"
         android:title="@string/comic_list_sort"
         app:showAsAction="never" />

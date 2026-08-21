@@ -164,10 +164,10 @@ class ComicItemView : MaterialCardView, ImageLoaderTarget<DrawablePalette> {
             get() = titleView.textColors.defaultColor
 
         @ColorInt
-        private val defaultBackgroundColor = ContextCompat.getColor(context, R.color.light_blue_800)
+        private val defaultBackgroundColor = ContextCompat.getColor(context, R.color.panels_navy)
 
         @ColorInt
-        private val defaultCorruptedColor = ContextCompat.getColor(context, R.color.red_800)
+        private val defaultCorruptedColor = ContextCompat.getColor(context, R.color.panels_red)
 
         private val menuInflater: MenuInflater
             get() = checkNotNull((context as? Activity)?.menuInflater) { "Can't get menuInflater from context $context" }

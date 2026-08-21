@@ -27,10 +27,12 @@ import app.seeneva.reader.logic.ComicsSettings
 import app.seeneva.reader.logic.comic.AddComicBookMode
 import app.seeneva.reader.logic.comic.Library
 import app.seeneva.reader.logic.entity.ComicAddResult
+import app.seeneva.reader.logic.entity.ComicCollection
 import app.seeneva.reader.logic.entity.ComicListItem
 import app.seeneva.reader.logic.entity.query.QueryParams
 import app.seeneva.reader.logic.usecase.ComicListUseCase
 import app.seeneva.reader.logic.usecase.RenameComicBookUseCase
+import app.seeneva.reader.logic.usecase.tags.ComicCollectionsUseCase
 import app.seeneva.reader.logic.usecase.tags.ComicCompletedTagUseCase
 import app.seeneva.reader.logic.usecase.tags.ComicRemovedTagUseCase
 import app.seeneva.reader.service.add.AddComicBookServiceConnector
@@ -50,6 +52,25 @@ sealed interface ListEvents
 data class ComicsMarkedAsRemoved(val ids: Set<Long>) : ListEvents
 
 data class ComicsOpened(val result: ComicAddResult) : ListEvents
+
+/**
+ * Comic books were added into a collection
+ * @param count count of added comic books
+ * @param collectionName name of the target collection
+ */
+data class ComicsAddedToCollection(val count: Int, val collectionName: String) : ListEvents
+
+/**
+ * Comic books were removed from a collection
+ * @param count count of removed comic books
+ * @param collectionName name of the target collection
+ */
+data class ComicsRemovedFromCollection(val count: Int, val collectionName: String) : ListEvents
+
+/**
+ * User typed invalid collection name
+ */
+object InvalidCollectionName : ListEvents
 
 sealed interface ComicsPagingState {
     object Idle : ComicsPagingState
@@ -75,6 +96,54 @@ interface ComicsListViewModel {
     val libraryState: StateFlow<Library.State>
 
     var queryParams: QueryParams
+
+    /**
+     * All known user collections sorted by name (case insensitive)
+     */
+    val collections: StateFlow<List<ComicCollection>>
+
+    /**
+     * Currently active collection or null if all comic books should be showed
+     */
+    val activeCollection: StateFlow<ComicCollection?>
+
+    /**
+     * Load all user collections into [collections]
+     */
+    fun loadCollections()
+
+    /**
+     * Load and return all user collections sorted by name (case insensitive)
+     */
+    suspend fun awaitCollections(): List<ComicCollection>
+
+    /**
+     * Set currently active collection filter
+     * @param collectionId id of the collection or null to show all comic books
+     */
+    fun setActiveCollection(collectionId: Long?)
+
+    /**
+     * Add comic books into an existed collection
+     * @param ids comic book ids to add
+     * @param collectionId target collection id
+     */
+    fun addToCollection(ids: Set<Long>, collectionId: Long)
+
+    /**
+     * Add comic books into a collection with provided [name].
+     * Collection will be created if it doesn't exist yet
+     * @param ids comic book ids to add
+     * @param name name of the target collection
+     */
+    fun addToNewCollection(ids: Set<Long>, name: String)
+
+    /**
+     * Remove comic books from a collection
+     * @param ids comic book ids to remove
+     * @param collectionId target collection id
+     */
+    fun removeFromCollection(ids: Set<Long>, collectionId: Long)
 
     /**
      * Start comics list page loading
@@ -127,6 +196,7 @@ class ComicsListViewModelImpl(
     private val settings: ComicsSettings,
     private val addComicBookServiceConnector: AddComicBookServiceConnector,
     private val comicListUseCase: ComicListUseCase,
+    private val collectionsUseCase: ComicCollectionsUseCase,
     private val removeStateUseCase: ComicRemovedTagUseCase,
     private val renameUseCase: RenameComicBookUseCase,
     private val markComicCompletedUseCase: ComicCompletedTagUseCase,
@@ -145,6 +215,16 @@ class ComicsListViewModelImpl(
         }
 
     private val queryParamsFlow = MutableStateFlow(settings.getComicListQueryParams())
+
+    override val collections = MutableStateFlow<List<ComicCollection>>(emptyList())
+
+    // Active collection is intentionally NOT persisted between app launches.
+    // Collection ids are dynamic (they are database ids) and the persisted query params
+    // should not be affected by them. So the library always starts from the 'All books' state
+    private val activeCollectionFlow = MutableStateFlow<ComicCollection?>(null)
+
+    override val activeCollection: StateFlow<ComicCollection?>
+        get() = activeCollectionFlow
 
     private val eventsSender = EventSender<ListEvents>()
 
@@ -177,9 +257,16 @@ class ComicsListViewModelImpl(
             vmScope.launch {
                 prevListLoadJob?.cancelAndJoin()
 
-                val pagingDataFlow = queryParamsFlow.flatMapLatest {
-                    comicListUseCase.getPagingData(PagingConfig(pageSize), it, startIndex)
-                }.cachedIn(this)
+                val pagingDataFlow = queryParamsFlow
+                    .combine(activeCollectionFlow) { params, collection -> params to collection?.id }
+                    .flatMapLatest { (params, collectionId) ->
+                        comicListUseCase.getPagingData(
+                            PagingConfig(pageSize),
+                            params,
+                            startIndex,
+                            collectionId
+                        )
+                    }.cachedIn(this)
                     .mapLatest {
                         val totalCount = comicListUseCase.totalCount(queryParams)
 
@@ -239,6 +326,97 @@ class ComicsListViewModelImpl(
     override fun setComicsCompletedMark(ids: Set<Long>, completed: Boolean) {
         vmScope.launch { markComicCompletedUseCase.change(ids, completed) }
     }
+
+    override fun loadCollections() {
+        vmScope.launch { refreshCollections() }
+    }
+
+    override suspend fun awaitCollections() = refreshCollections()
+
+    override fun setActiveCollection(collectionId: Long?) {
+        if (activeCollectionFlow.value?.id == collectionId) {
+            return
+        }
+
+        if (collectionId == null) {
+            activeCollectionFlow.value = null
+        } else {
+            vmScope.launch {
+                //collections can be not loaded yet (e.g. after a process death)
+                val collection = collections.value.firstOrNull { it.id == collectionId }
+                    ?: refreshCollections().firstOrNull { it.id == collectionId }
+
+                activeCollectionFlow.value = collection
+            }
+        }
+    }
+
+    override fun addToCollection(ids: Set<Long>, collectionId: Long) {
+        if (ids.isEmpty()) {
+            return
+        }
+
+        vmScope.launch {
+            collectionsUseCase.assignToCollection(ids, collectionId)
+
+            val collectionName = refreshCollections()
+                .firstOrNull { it.id == collectionId }
+                ?.name ?: return@launch
+
+            eventsSender.send(ComicsAddedToCollection(ids.size, collectionName))
+        }
+    }
+
+    override fun addToNewCollection(ids: Set<Long>, name: String) {
+        if (ids.isEmpty()) {
+            return
+        }
+
+        vmScope.launch {
+            val collection = try {
+                collectionsUseCase.createOrGetCollection(name)
+            } catch (t: IllegalArgumentException) {
+                eventsSender.send(InvalidCollectionName)
+                return@launch
+            }
+
+            collectionsUseCase.assignToCollection(ids, collection.id)
+
+            refreshCollections()
+
+            eventsSender.send(ComicsAddedToCollection(ids.size, collection.name))
+        }
+    }
+
+    override fun removeFromCollection(ids: Set<Long>, collectionId: Long) {
+        if (ids.isEmpty()) {
+            return
+        }
+
+        vmScope.launch {
+            val collectionName = collections.value.firstOrNull { it.id == collectionId }?.name
+
+            collectionsUseCase.removeFromCollection(ids, collectionId)
+
+            if (collectionName != null) {
+                eventsSender.send(ComicsRemovedFromCollection(ids.size, collectionName))
+            }
+        }
+    }
+
+    /**
+     * Load all user collections and update [collections] state
+     * @return loaded collections
+     */
+    private suspend fun refreshCollections(): List<ComicCollection> =
+        collectionsUseCase.getCollections()
+            .also { loaded ->
+                collections.value = loaded
+
+                //active collection could be deleted or renamed somewhere else
+                activeCollectionFlow.value = activeCollectionFlow.value
+                    ?.let { active -> loaded.firstOrNull { it.id == active.id } }
+            }
 
     private data class ListLoadingJob(
         val pageSize: Int,

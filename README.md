@@ -1,5 +1,8 @@
 <p align="center"><img src="docs/img/icon/seeneva_icon.png"></p>
-<h1 align="center"><b><a href="https://seeneva.app">Seeneva</a></b></h1>
+<h1 align="center"><b>Panels</b></h1>
+
+Panels is a personal fork of [Seeneva](https://github.com/Seeneva/seeneva-reader-android)
+focused on landscape spreads, configurable assisted reading, and library collections.
 <h4 align="center">A libre smart powered comic book reader for Android.</h4>
 
 <p align="center">

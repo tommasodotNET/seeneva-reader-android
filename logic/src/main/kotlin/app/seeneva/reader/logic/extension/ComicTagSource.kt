@@ -72,3 +72,31 @@ internal suspend fun ComicTagSource.getOrCreateHardcodedTag(
     return getHardcodedTag(context, type)
         ?: type.newHardcodedTag().let { it.copy(id = insertOrReplace(it).first()) }
 }
+
+/**
+ * @return all user created tags sorted by name (case insensitive)
+ */
+internal suspend fun ComicTagSource.getUserTags(): List<ComicTag> =
+    findAllByType(TagType.TYPE_USER.ordinal)
+
+/**
+ * Try to find a user tag by it [name]. Name comparison is case insensitive
+ * @param name name of the user tag
+ * @return user tag or null if it doesn't exist
+ */
+internal suspend fun ComicTagSource.findUserTagByName(name: String): ComicTag? =
+    findByTypeAndName(TagType.TYPE_USER.ordinal, name)
+
+/**
+ * Get user tag by it [name] or create a new one. Name comparison is case insensitive,
+ * so it is not possible to have two user tags with case insensitively equal names
+ * @param name name of the user tag. Should not be blank
+ * @return existed or newly created user tag
+ */
+internal suspend fun ComicTagSource.getOrCreateUserTag(name: String): ComicTag {
+    require(name.isNotBlank()) { "User tag name cannot be blank" }
+
+    return findUserTagByName(name)
+        ?: ComicTag(0, name, TagType.TYPE_USER.ordinal)
+            .let { it.copy(id = insertOrReplace(it).first()) }
+}

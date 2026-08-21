@@ -58,6 +58,8 @@ internal interface QueryParamsResolver {
         fun addTagFilter(tagId: Long, filterType: TagFilterType)
 
         suspend fun addTagFilter(tagType: TagType, filterType: TagFilterType)
+
+        suspend fun addTagFilters(tagType: TagType, filterType: TagFilterType)
     }
 }
 
@@ -67,6 +69,26 @@ internal interface QueryParamsResolver {
 internal suspend fun QueryParamsResolver.FiltersEditor.addDefaultFilters() {
     addTagFilter(TagType.TYPE_REMOVED, TagFilterType.Exclude)
 }
+
+/**
+ * Build filters editor which adds default filters and filter by an active
+ * comic book collection (user tag) if any.
+ *
+ * Collection ids are dynamic (they depend on a device database state), so they are never a part
+ * of the serialized [QueryParams] and injected here at query build time instead
+ *
+ * @param collectionId id of the active collection or null to show only uncollected books
+ */
+internal fun collectionFilters(collectionId: Long?): suspend QueryParamsResolver.FiltersEditor.() -> Unit =
+    {
+        addDefaultFilters()
+
+        if (collectionId != null) {
+            addTagFilter(collectionId, TagFilterType.Include)
+        } else {
+            addTagFilters(TagType.TYPE_USER, TagFilterType.Exclude)
+        }
+    }
 
 internal class QueryParamsResolverImpl(
     private val comicTagSource: ComicTagSource
@@ -128,6 +150,12 @@ internal class QueryParamsResolverImpl(
                 }
             }?.also { tagId ->
                 filtersInner[tagId] = filterType
+            }
+        }
+
+        override suspend fun addTagFilters(tagType: TagType, filterType: TagFilterType) {
+            tagSource.findAllByType(tagType.ordinal).forEach {
+                filtersInner[it.id] = filterType
             }
         }
     }

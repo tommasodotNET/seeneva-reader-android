@@ -36,12 +36,14 @@ import org.tinylog.kotlin.Logger
  * @param transaction local transaction runner
  * @param queryParams requested comics query parameters
  * @param defaultLoadSize default load size. It can be different from [LoadParams.loadSize]
+ * @param collectionId id of the active comic book collection (user tag) or null to show all books
  */
 internal class ComicsPagingDataSource(
     private val useCase: ComicsPageUseCase,
     private val transaction: LocalTransactionRunner,
     private val queryParams: QueryParams,
     private val defaultLoadSize: Int,
+    private val collectionId: Long? = null,
 ) : PagingSource<Int, ComicListItem>() {
     private var totalCount = COUNT_UNDEFINED
 
@@ -53,7 +55,7 @@ internal class ComicsPagingDataSource(
 
         val pageData = transaction.run {
             if (totalCount == COUNT_UNDEFINED) {
-                totalCount = useCase.count(queryParams)
+                totalCount = useCase.count(queryParams, collectionId)
             }
 
             if (totalCount == 0L) {
@@ -65,7 +67,8 @@ internal class ComicsPagingDataSource(
                         is LoadParams.Refresh -> params.loadSize
                         else -> defaultLoadSize
                     },
-                    queryParams
+                    queryParams,
+                    collectionId
                 )
             }
         }

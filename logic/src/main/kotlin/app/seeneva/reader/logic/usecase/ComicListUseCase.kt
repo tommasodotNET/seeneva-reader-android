@@ -31,6 +31,7 @@ import app.seeneva.reader.logic.entity.ComicListItem
 import app.seeneva.reader.logic.entity.query.QueryParams
 import app.seeneva.reader.logic.entity.query.QueryParamsResolver
 import app.seeneva.reader.logic.entity.query.addDefaultFilters
+import app.seeneva.reader.logic.entity.query.collectionFilters
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.*
 import org.tinylog.kotlin.Logger
@@ -48,12 +49,16 @@ interface ComicListUseCase {
      * @param config paging config
      * @param queryParams requested query params
      * @param initPageStartIndex initial requested page start index
+     * @param collectionId id of the active comic book collection (user tag) or null to show all
+     * comic books. It is not a part of [QueryParams] because collection ids are dynamic and should
+     * never be serialized into persisted query params
      * @return flow of [PagingData]
      */
     fun getPagingData(
         config: PagingConfig,
         queryParams: QueryParams,
-        initPageStartIndex: Int? = null
+        initPageStartIndex: Int? = null,
+        collectionId: Long? = null
     ): Flow<PagingData<ComicListItem>>
 }
 
@@ -82,7 +87,8 @@ internal class ComicListUseCaseImpl(
     override fun getPagingData(
         config: PagingConfig,
         queryParams: QueryParams,
-        initPageStartIndex: Int?
+        initPageStartIndex: Int?,
+        collectionId: Long?
     ) = flow {
         val sourceFactory = InvalidatingPagingSourceFactory {
             Logger.debug("Create new comics paging source")
@@ -91,13 +97,14 @@ internal class ComicListUseCaseImpl(
                 pageUseCase,
                 localTransactionRunner,
                 queryParams,
-                config.pageSize
+                config.pageSize,
+                collectionId
             )
         }
 
         coroutineScope {
             // Subscribe to database changes and invalidate data source if any occur
-            subscribeUpdates(queryParams)
+            subscribeUpdates(queryParams, collectionId)
                 .onEach {
                     Logger.debug("Invalidate paging data source")
                     sourceFactory.invalidate()
@@ -111,21 +118,26 @@ internal class ComicListUseCaseImpl(
     /**
      * Create [Flow] which will emit when comic books have been changed
      * @param params comic book query params
+     * @param collectionId active comic book collection id if any
      */
-    private fun subscribeUpdates(params: QueryParams) =
+    private fun subscribeUpdates(params: QueryParams, collectionId: Long?) =
         flow {
-            emitAll(comicBookSource.subscribeSimpleWithTags(params.resolve(0, 0))
+            emitAll(comicBookSource.subscribeSimpleWithTags(params.resolve(0, 0, collectionId))
                 .drop(1) //we do not want to receive first emit
                 .map { }
                 .conflate()
                 .flowOn(dispatchers.io))
         }
 
-    private suspend fun QueryParams.resolve(start: Int, count: Int): DataLayerQueryParams =
+    private suspend fun QueryParams.resolve(
+        start: Int,
+        count: Int,
+        collectionId: Long?
+    ): DataLayerQueryParams =
         queryParamsResolver.resolve(
             this,
             start,
             count,
-            edit = QueryParamsResolver.FiltersEditor::addDefaultFilters
+            edit = collectionFilters(collectionId)
         )
 }

@@ -74,7 +74,11 @@ internal class ViewerConfigUseCaseImpl(private val settings: ComicsSettings) : V
         private fun ViewerConfig.validate() {
             try {
                 if (brightness !in ViewerConfig.SYSTEM_BRIGHTNESS..1.0f) {
-                    throw IllegalArgumentException()
+                    throw IllegalArgumentException("Invalid brightness value: $brightness")
+                }
+
+                if (assistedBubbleZoomScale !in ViewerConfig.ASSISTED_BUBBLE_ZOOM_SCALE_MIN..ViewerConfig.ASSISTED_BUBBLE_ZOOM_SCALE_MAX) {
+                    throw IllegalArgumentException("Invalid assisted bubble zoom scale value: $assistedBubbleZoomScale")
                 }
             } catch (t: Throwable) {
                 Logger.error(t, "Invalid comic book viewer config $this")

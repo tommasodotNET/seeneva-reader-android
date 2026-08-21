@@ -40,7 +40,7 @@
         android:drawablePadding="16dp"
         android:gravity="center_horizontal"
         android:textAppearance="@style/AppTextAppearance.ViewerHelper"
-        android:textColor="@color/cerulean"
+        android:textColor="@color/panels_blue"
         android:textSize="18sp"
         app:drawableBottomCompat="@drawable/viewer_helper_indicator"
         tools:text="Tap" />

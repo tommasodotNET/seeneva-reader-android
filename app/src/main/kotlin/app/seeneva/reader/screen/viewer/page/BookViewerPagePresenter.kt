@@ -32,6 +32,7 @@ import app.seeneva.reader.logic.entity.ComicPageData
 import app.seeneva.reader.logic.entity.ComicPageObject
 import app.seeneva.reader.logic.entity.ComicPageObjectContainer
 import app.seeneva.reader.logic.entity.Direction
+import app.seeneva.reader.logic.entity.configuration.ViewerConfig
 import app.seeneva.reader.logic.image.ImageLoader
 import app.seeneva.reader.logic.text.ocr.OCR
 import app.seeneva.reader.logic.text.tts.TTS
@@ -63,6 +64,11 @@ interface BookViewerPagePresenter : Presenter {
     val txtRecognition: SharedFlow<TxtRecognitionState>
 
     /**
+     * Current viewer configuration. Used e.g. to get assisted reading bubble/balloon zoom scale
+     */
+    val configState: StateFlow<ViewerConfig>
+
+    /**
      * Request next page object by provided direction
      * @param direction object read direction
      */
@@ -72,6 +78,15 @@ interface BookViewerPagePresenter : Presenter {
      * Request current page object
      */
     fun currentPageObject(): SelectedPageObject?
+
+    /**
+     * Select page object located at provided source image coordinates (e.g. user directly tapped a bubble).
+     * Updates currently read page object position so that next/previous navigation continues from it.
+     * @param x X source image coordinate
+     * @param y Y source image coordinate
+     * @return selected page object or `null` if there is no object at provided coordinates
+     */
+    fun selectPageObjectAt(x: Float, y: Float): SelectedPageObject?
 
     /**
      * Reset currently read page object position
@@ -142,6 +157,12 @@ class BookViewerPagePresenterImpl(
 
     override val txtRecognition = _txtRecognition.asSharedFlow()
 
+    override val configState: StateFlow<ViewerConfig> =
+        flowOf(flow { emit(settings.getViewerConfig()) }, settings.viewerConfigFlow())
+            .flattenConcat()
+            .map { it ?: ViewerConfig() }
+            .stateIn(presenterScope, SharingStarted.Eagerly, ViewerConfig())
+
     /**
      * Current viewed page object position
      */
@@ -205,22 +226,35 @@ class BookViewerPagePresenterImpl(
         bundleOf(STATE_READ_POSITION to readObjectPosition)
 
     override fun nextPageObject(direction: PageObjectDirection): SelectedPageObject? {
+        val page = requirePageData()
         val nextObject = when (direction) {
             PageObjectDirection.FORWARD -> {
                 readObjectPosition + 1
             }
 
             PageObjectDirection.BACKWARD -> {
-                readObjectPosition - 1
+                if (readObjectPosition < 0) {
+                    page.objects.size - 1
+                } else {
+                    readObjectPosition - 1
+                }
             }
         }
 
-        return requirePageData().intoSelectedPageObject(nextObject)
+        return page.intoSelectedPageObject(nextObject)
             ?.also { readObjectPosition = nextObject }
     }
 
     override fun currentPageObject() =
         requirePageData().intoSelectedPageObject(readObjectPosition)
+
+    override fun selectPageObjectAt(x: Float, y: Float): SelectedPageObject? {
+        val page = requirePageData()
+
+        val (pos, _) = page.objects.indexedGet(x, y) ?: return null
+
+        return page.intoSelectedPageObject(pos)?.also { readObjectPosition = pos }
+    }
 
     override fun resetReadPageObject() {
         readObjectPosition = -1

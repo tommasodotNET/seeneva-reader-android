@@ -19,6 +19,7 @@
 
 <resources>
     <integer name="comic_title_length">100</integer>
+    <integer name="comic_collection_name_length">100</integer>
     <integer name="comic_thumb_grid_size">2</integer>
 
     <item name="comic_viewer_preview_height_percentage" format="float" type="dimen">0.3</item>

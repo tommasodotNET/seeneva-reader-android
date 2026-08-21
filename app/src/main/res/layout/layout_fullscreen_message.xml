@@ -32,7 +32,7 @@
         android:layout_marginBottom="8dp"
         android:alpha="0.2"
         android:scaleType="fitCenter"
-        app:tint="@color/cerulean"
+        app:tint="@color/panels_blue"
         app:layout_constraintBottom_toTopOf="@id/message"
         app:layout_constraintHeight_default="percent"
         app:layout_constraintHeight_percent="0.3"

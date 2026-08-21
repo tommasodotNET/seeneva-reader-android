@@ -63,6 +63,12 @@ interface ViewerConfigPresenter : Presenter {
      * @param brightness new brightness value
      */
     fun onBrightnessChange(brightness: Float)
+
+    /**
+     * User changed assisted reading bubble/balloon zoom scale value
+     * @param scale new zoom scale value
+     */
+    fun onBubbleZoomScaleChange(scale: Float)
 }
 
 class ViewerConfigPresenterImpl(
@@ -173,6 +179,14 @@ class ViewerConfigPresenterImpl(
         currentConfig()?.also {
             if (it.brightness != brightness) {
                 viewModel.saveConfig(it.copy(brightness = brightness))
+            }
+        }
+    }
+
+    override fun onBubbleZoomScaleChange(scale: Float) {
+        currentConfig()?.also {
+            if (it.assistedBubbleZoomScale != scale) {
+                viewModel.saveConfig(it.copy(assistedBubbleZoomScale = scale))
             }
         }
     }

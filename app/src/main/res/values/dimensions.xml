@@ -24,6 +24,7 @@
     <dimen name="comic_filter_list_margin">8dp</dimen>
 
     <dimen name="comic_list_item_height">120dp</dimen>
+    <dimen name="comic_collection_grid_height">180dp</dimen>
 
     <dimen name="bottom_sheet_drag_corner_radius">16dp</dimen>
     <dimen name="bottom_sheet_drag_line_stroke_width">6dp</dimen>

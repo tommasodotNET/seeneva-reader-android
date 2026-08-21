@@ -22,10 +22,17 @@ import androidx.recyclerview.selection.ItemKeyProvider
 import androidx.recyclerview.widget.RecyclerView
 import app.seeneva.reader.screen.list.adapter.ComicsAdapter
 
-class ComicKeyProvider(private val adapter: ComicsAdapter) : ItemKeyProvider<Long>(SCOPE_CACHED) {
-    override fun getKey(position: Int) =
-        // Adapter.getItem will trigger page loading. We don't need this.
-        adapter.peek(position)?.id
+class ComicKeyProvider(
+    private val adapter: ComicsAdapter,
+    private val positionOffset: () -> Int = { 0 }
+) : ItemKeyProvider<Long>(SCOPE_CACHED) {
+    override fun getKey(position: Int): Long? {
+        val adapterPosition = position - positionOffset()
+        if (adapterPosition !in 0 until adapter.itemCount) return null
+
+        // Adapter.peek will not trigger page loading.
+        return adapter.peek(adapterPosition)?.id
+    }
 
     override fun getPosition(key: Long): Int {
         // With AndroidX Paging 3.0.0 where is no stable ids anymore. Adapter.getItemId will always return RecyclerView.NO_POSITION
@@ -43,6 +50,6 @@ class ComicKeyProvider(private val adapter: ComicsAdapter) : ItemKeyProvider<Lon
                 } else {
                     null
                 }
-            } ?: RecyclerView.NO_POSITION
+            }?.plus(positionOffset()) ?: RecyclerView.NO_POSITION
     }
 }
