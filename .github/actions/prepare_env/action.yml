@@ -6,7 +6,7 @@ runs:
   steps:
     - name: Install packages
       shell: bash
-      run: sudo apt-get update && sudo apt-get install --yes autoconf automake gettext libtool
+      run: sudo apt-get update && sudo apt-get install --yes autoconf automake autopoint gettext libtool
 
     - name: Setup required Java
       uses: actions/setup-java@v5
