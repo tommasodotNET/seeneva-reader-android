@@ -25,6 +25,7 @@ from the original Seeneva app.
 - CBZ, CBR, CB7, CBT, and PDF support
 - On-device speech-balloon detection and assisted reading
 - Configurable bubble zoom and direct tap-to-zoom
+- Panel-row reading order for bubble navigation, including staggered panels
 - Landscape two-page spreads with LTR and RTL/manga reading order
 - Folder-style collections with representative cover artwork
 - ComicRack metadata support
@@ -36,6 +37,9 @@ from the original Seeneva app.
 Allow APK installation from your browser or file manager, open the downloaded APK, and
 confirm the installation. Existing Panels installations can be updated in place when the
 APK is signed with the same release key.
+
+Tapping a detected bubble zooms it even in the center of the screen. To dismiss
+bubble zoom, tap empty space in the center zone.
 
 With Android Debug Bridge:
 

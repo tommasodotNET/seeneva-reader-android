@@ -1,6 +1,12 @@
 name: Prepare environment
 description: Prepare the environment required to build Panels
 
+inputs:
+  setup-ruby:
+    description: Install Ruby and Fastlane dependencies
+    required: false
+    default: "true"
+
 runs:
   using: composite
   steps:
@@ -43,6 +49,7 @@ runs:
         /usr/bin/cmake --version
 
     - name: Setup required Ruby
+      if: ${{ inputs.setup-ruby == 'true' }}
       uses: ruby/setup-ruby@v1
       with:
         bundler-cache: true

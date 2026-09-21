@@ -34,12 +34,6 @@ import kotlin.Comparator
 import kotlin.math.absoluteValue
 import kotlin.math.min
 
-//TODO maybe it is best to give user a chance to tweak it somehow?
-/**
- * Required minimal panels edge difference
- */
-private const val PANEL_MIN_DIFF = 160.0f
-
 /**
  * Required minimal object group edge difference
  */
@@ -56,6 +50,11 @@ private const val OBJECT_MIN_DIFF = 15.0f
  * How much object X coordinate should be hit to consider it beneath another object (in percent)
  */
 private const val OBJECT_BENEATH = 0.15f
+
+/**
+ * Minimum portion of the shorter panel height that must overlap for panels to share a row
+ */
+private const val PANEL_ROW_MIN_VERTICAL_OVERLAP = 0.25f
 
 /**
  * Sort provided ML comic book objects founded on the page
@@ -90,18 +89,8 @@ internal fun generateReadOrderedObjects(
     val intersectedObjects =
         EnumMap<ObjectClass, MutableList<Entry<ComicPageObject, Rectangle>>>(ObjectClass::class.java)
 
-    // Map of comic book page panels with TreeSet of objects inside it
-    val objectsByPanel =
-        TreeMap<ComicPageObject, MutableList<PanelGroup>> { o1, o2 ->
-            defaultComparator(
-                direction,
-                diffProportionally(
-                    pageWidth,
-                    pageHeight,
-                    PANEL_MIN_DIFF
-                )
-            ).compare(o1.bbox, o2.bbox)
-        }
+    // Map of comic book page panels with objects inside it
+    val objectsByPanel = linkedMapOf<ComicPageObject, MutableList<PanelGroup>>()
 
     //Already consumed objects ids
     val consumedObjectIds = hashSetOf<Long>()
@@ -177,24 +166,103 @@ internal fun generateReadOrderedObjects(
             objectsByPanel.getOrPut(panel) { arrayListOf() } += group
         }
 
-    return objectsByPanel.values
-        .asSequence()
-        .onEach { l ->
-            //sort group of objects at the panel
-            l.sortWith { o1, o2 ->
-                defaultComparator(
-                    direction,
-                    diffProportionally(
-                        pageWidth,
-                        pageHeight,
-                        GROUP_MIN_DIFF
-                    )
-                ).compare(o1.mbr, o2.mbr)
-            }
+    objectsByPanel.values.forEach { groups ->
+        //sort group of objects at the panel
+        groups.sortWith { o1, o2 ->
+            defaultComparator(
+                direction,
+                diffProportionally(
+                    pageWidth,
+                    pageHeight,
+                    GROUP_MIN_DIFF
+                )
+            ).compare(o1.mbr, o2.mbr)
         }
+    }
+
+    return orderPanelsByRows(
+        objectsByPanel.keys.map { panel ->
+            panel to PanelBounds(
+                panel.bbox.left,
+                panel.bbox.top,
+                panel.bbox.right,
+                panel.bbox.bottom
+            )
+        },
+        direction
+    )
+        .asSequence()
+        .map { objectsByPanel.getValue(it) }
         .flatten()
         .flatten()
         .toList()
+}
+
+internal data class PanelBounds(
+    val left: Float,
+    val top: Float,
+    val right: Float,
+    val bottom: Float
+) {
+    val height: Float
+        get() = bottom - top
+}
+
+internal fun <T> orderPanelsByRows(
+    panels: List<Pair<T, PanelBounds>>,
+    direction: Direction
+): List<T> {
+    if (panels.size < 2) {
+        return panels.map { it.first }
+    }
+
+    val rows = arrayListOf<PanelRow<T>>()
+
+    panels.sortedWith(compareBy({ it.second.top }, { it.second.left }))
+        .forEach { panel ->
+            val row = rows
+                .asSequence()
+                .map { it to it.verticalOverlapRatio(panel.second) }
+                .filter { (_, overlap) -> overlap >= PANEL_ROW_MIN_VERTICAL_OVERLAP }
+                .maxByOrNull { (_, overlap) -> overlap }
+                ?.first
+
+            if (row == null) {
+                rows += PanelRow(panel)
+            } else {
+                row.panels += panel
+            }
+        }
+
+    return rows
+        .sortedBy { it.top }
+        .flatMap { row ->
+            when (direction) {
+                Direction.LTR -> row.panels.sortedBy { it.second.left }
+                Direction.RTL -> row.panels.sortedByDescending { it.second.right }
+            }.map { it.first }
+        }
+}
+
+private class PanelRow<T>(
+    firstPanel: Pair<T, PanelBounds>
+) {
+    val panels = arrayListOf(firstPanel)
+
+    val top: Float
+        get() = panels.minOf { it.second.top }
+
+    fun verticalOverlapRatio(panel: PanelBounds): Float {
+        val reference = panels.first().second
+        val overlap = min(reference.bottom, panel.bottom) - maxOf(reference.top, panel.top)
+        val minHeight = min(reference.height, panel.height)
+
+        return if (minHeight > 0f) {
+            overlap.coerceAtLeast(0f) / minHeight
+        } else {
+            0f
+        }
+    }
 }
 
 /**

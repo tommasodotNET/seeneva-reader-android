@@ -136,33 +136,30 @@ class BookViewerPageFragment :
             private val rect = Rect()
 
             override fun onSingleTapConfirmed(e: MotionEvent): Boolean {
-                if (isHideObjectBalloonTap(e)) {
+                val directObject = viewBinding.scaleImageView
+                    .viewToSourceCoord(e.x, e.y, point)
+                    ?.let { (x, y) -> presenter.selectPageObjectAt(x, y) }
+
+                if (directObject != null) {
+                    // A direct bubble tap takes precedence over dismiss and navigation zones.
+                    showPageObject(directObject)
+                    callback?.onPageObjectSelected(pageId)
+                } else if (isHideObjectBalloonTap(e)) {
                     //this is a zone to hide object
                     callback?.onPageObjectDismissRequested() ?: hideCurrentPageObject()
                 } else {
-                    //first check if user tapped directly on a bubble/balloon - if so show it
-                    //right away instead of just navigating to the next/previous object
-                    val (x, y) = viewBinding.scaleImageView.viewToSourceCoord(e.x, e.y, point)!!
+                    //otherwise we should show new object depends on tap X position
+                    val readDirection =
+                        requireNotNull(presenter.readDirectionState.value) {
+                            "Read direction is null"
+                        }
+                    val objectDirection = readDirection.nextObjectDirectionTap(e)
 
-                    val directObject = presenter.selectPageObjectAt(x, y)
-
-                    if (directObject != null) {
-                        showPageObject(directObject)
-                        callback?.onPageObjectSelected(pageId)
-                    } else {
-                        //otherwise we should show new object depends on tap X position
-                        val readDirection =
-                            requireNotNull(presenter.readDirectionState.value) {
-                                "Read direction is null"
-                            }
-                        val objectDirection = readDirection.nextObjectDirectionTap(e)
-
-                        callback?.onPageObjectNavigationRequested(
-                            pageId,
-                            objectDirection,
-                            readDirection
-                        ) ?: showNextPageObject(objectDirection)
-                    }
+                    callback?.onPageObjectNavigationRequested(
+                        pageId,
+                        objectDirection,
+                        readDirection
+                    ) ?: showNextPageObject(objectDirection)
                 }
 
                 return true
