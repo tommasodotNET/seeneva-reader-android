@@ -21,9 +21,16 @@ runs:
           build-essential \
           cmake \
           gettext \
+          libclang-14-dev \
           libtool \
           ninja-build \
           pkg-config
+
+    - name: Select libclang for legacy Rust bindings
+      shell: bash
+      run: |
+        test -f /usr/lib/llvm-14/lib/libclang.so
+        echo "LIBCLANG_PATH=/usr/lib/llvm-14/lib" >> "$GITHUB_ENV"
 
     - name: Setup required Java
       uses: actions/setup-java@v5
@@ -62,9 +69,9 @@ runs:
           ~/.cargo/registry
           ~/.cargo/git
           ./native/target
-        key: ${{ runner.os }}-cargo-${{ hashFiles('./native/**/Cargo.lock', '**/rust-toolchain') }}
+        key: ${{ runner.os }}-cargo-clang14-${{ hashFiles('./native/**/Cargo.lock', '**/rust-toolchain') }}
         restore-keys: |
-          ${{ runner.os }}-cargo-
+          ${{ runner.os }}-cargo-clang14-
 
     - name: Cache Gradle wrapper
       uses: actions/cache@v4
