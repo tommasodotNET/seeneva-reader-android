@@ -85,6 +85,12 @@ internal fun generateReadOrderedObjects(
     //All objects R-Tree
     val objectsRTree = RTree.create(objects.map(ComicPageObject::asRTreeEntry))
 
+    val panels = objectsByClass[ObjectClass.PANEL].orEmpty().sortedBy { it.id }
+    val panelBounds = panels.map { it.id to it.bbox.panelBounds() }
+    val panelOwners = objects
+        .filterNot { it.classId == ObjectClass.PANEL }
+        .associate { it.id to findParentPanel(it.bbox.panelBounds(), panelBounds) }
+
     //Reusable map for intersected objects
     val intersectedObjects =
         EnumMap<ObjectClass, MutableList<Entry<ComicPageObject, Rectangle>>>(ObjectClass::class.java)
@@ -115,10 +121,7 @@ internal fun generateReadOrderedObjects(
                 .groupByTo(intersectedObjects) { it.value().classId }
                 .also { _intersectedObjects ->
 
-                    //get parent panel which has the most intersection area
-                    val parentPanel = _intersectedObjects[ObjectClass.PANEL]?.maxByOrNull {
-                        it.geometry().intersectionArea(objGeometry)
-                    }?.value()
+                    val parentPanel = panels.firstOrNull { it.id == panelOwners.getValue(obj.id) }
 
                     //All neighbours
                     val neighbourObjs = arrayListOf<ComicPageObject>()
@@ -128,6 +131,7 @@ internal fun generateReadOrderedObjects(
                     _intersectedObjects.asSequence()
                         .filterNot { it.key == ObjectClass.PANEL }
                         .flatMap { it.value }
+                        .filter { panelOwners.getValue(it.value().id) == parentPanel?.id }
                         .flatMap { (o, g) ->
                             //generate all possible neighbours for the object
                             sequence {
@@ -135,6 +139,7 @@ internal fun generateReadOrderedObjects(
                                     pageWidth,
                                     pageHeight,
                                     objectsRTree,
+                                    panelOwners,
                                     parentPanel,
                                     o,
                                     g,
@@ -182,12 +187,7 @@ internal fun generateReadOrderedObjects(
 
     return orderPanelsByRows(
         objectsByPanel.keys.map { panel ->
-            panel to PanelBounds(
-                panel.bbox.left,
-                panel.bbox.top,
-                panel.bbox.right,
-                panel.bbox.bottom
-            )
+            panel to panel.bbox.panelBounds()
         },
         direction
     )
@@ -198,6 +198,8 @@ internal fun generateReadOrderedObjects(
         .toList()
 }
 
+private fun RectF.panelBounds() = PanelBounds(left, top, right, bottom)
+
 internal data class PanelBounds(
     val left: Float,
     val top: Float,
@@ -207,6 +209,23 @@ internal data class PanelBounds(
     val height: Float
         get() = bottom - top
 }
+
+internal fun <T> findParentPanel(
+    bubble: PanelBounds,
+    panels: List<Pair<T, PanelBounds>>
+): T? =
+    panels.asSequence()
+        .map { (id, panel) ->
+            val overlapWidth = (min(bubble.right, panel.right) - maxOf(bubble.left, panel.left))
+                .coerceAtLeast(0f)
+            val overlapHeight = (min(bubble.bottom, panel.bottom) - maxOf(bubble.top, panel.top))
+                .coerceAtLeast(0f)
+            Triple(id, overlapWidth * overlapHeight, (panel.right - panel.left) * panel.height)
+        }
+        .filter { it.second > 0f }
+        // Prefer the more specific panel when nested detections contain the same bubble.
+        .maxWithOrNull(compareBy<Triple<T, Float, Float>> { it.second }.thenByDescending { it.third })
+        ?.first
 
 internal fun <T> orderPanelsByRows(
     panels: List<Pair<T, PanelBounds>>,
@@ -268,6 +287,7 @@ private class PanelRow<T>(
 /**
  * Yields all neighbour objects for provided [obj] using recursive method
  * @param objects all objects R-Tree
+ * @param panelOwners fixed panel assignment for each non-panel object
  * @param parentPanel [obj] parent panel
  * @param obj which neighbour objects should be found
  * @param rectangle [obj] geometry
@@ -277,6 +297,7 @@ private suspend fun SequenceScope<ComicPageObject>.yieldObjectNeighbors(
     pageW: Int,
     pageH: Int,
     objects: RTree<ComicPageObject, Rectangle>,
+    panelOwners: Map<Long, Long?>,
     parentPanel: ComicPageObject?,
     obj: ComicPageObject,
     rectangle: Rectangle = obj.bbox.asRTreeGeometry(),
@@ -294,24 +315,12 @@ private suspend fun SequenceScope<ComicPageObject>.yieldObjectNeighbors(
             continue
         }
 
-        val sameParent = objects.search(g).let { intersections ->
-            //check if intersected object has same parent panel as provided [obj]
-            if (parentPanel != null) {
-                intersections.firstOrNull { it.value().id == parentPanel.id } != null
-            } else {
-                //it shouldn't has any intersected panels
-                intersections.firstOrNull { it.value().classId == ObjectClass.PANEL } == null
-            }
-        }
-
-        //object's has different parent panels
-        //I will assume that they cannot be grouped together
-        if (!sameParent) {
+        if (panelOwners.getValue(o.id) != parentPanel?.id) {
             continue
         }
 
         //recursively emit this object neighbors
-        yieldObjectNeighbors(pageW, pageH, objects, parentPanel, o, g, filterObjIds)
+        yieldObjectNeighbors(pageW, pageH, objects, panelOwners, parentPanel, o, g, filterObjIds)
     }
 }
 

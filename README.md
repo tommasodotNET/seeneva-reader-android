@@ -26,6 +26,7 @@ from the original Seeneva app.
 - On-device speech-balloon detection and assisted reading
 - Configurable bubble zoom and direct tap-to-zoom
 - Panel-row reading order for bubble navigation, including staggered panels
+- Fixed bubble-to-panel ownership so neighboring bubbles cannot pull each other into a different panel
 - Landscape two-page spreads with LTR and RTL/manga reading order
 - Folder-style collections with representative cover artwork
 - ComicRack metadata support

@@ -21,8 +21,67 @@ package app.seeneva.reader.logic.comic
 import app.seeneva.reader.logic.entity.Direction
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertNull
 
 class PageObjectHelperTest {
+    @Test
+    fun `tall left panel keeps both bubbles before the two right panels`() {
+        val panels = listOf(
+            "left" to PanelBounds(40f, 100f, 470f, 750f),
+            "top-right" to PanelBounds(495f, 30f, 1150f, 425f),
+            "bottom-right" to PanelBounds(495f, 450f, 1150f, 750f)
+        )
+        val bubbles = listOf(
+            1 to PanelBounds(85f, 140f, 285f, 270f),
+            2 to PanelBounds(850f, 160f, 1090f, 250f),
+            3 to PanelBounds(915f, 245f, 1135f, 400f),
+            4 to PanelBounds(195f, 325f, 415f, 455f),
+            5 to PanelBounds(520f, 465f, 710f, 640f),
+            6 to PanelBounds(635f, 620f, 785f, 715f)
+        )
+        val byPanel = bubbles.groupBy { (_, bounds) -> findParentPanel(bounds, panels) }
+        val ordered = orderPanelsByRows(panels, Direction.LTR)
+            .flatMap { byPanel.getValue(it) }
+            .map { it.first }
+
+        assertEquals(listOf(1, 4, 2, 3, 5, 6), ordered)
+    }
+
+    @Test
+    fun `overlapping bubbles across a panel border retain different owners`() {
+        val panels = listOf(
+            "left" to PanelBounds(0f, 0f, 500f, 500f),
+            "right" to PanelBounds(480f, 0f, 1000f, 500f)
+        )
+        val leftBubble = PanelBounds(400f, 100f, 510f, 220f)
+        val rightBubble = PanelBounds(490f, 150f, 650f, 270f)
+
+        assertEquals("left", findParentPanel(leftBubble, panels))
+        assertEquals("right", findParentPanel(rightBubble, panels))
+        assertEquals("left", findParentPanel(leftBubble, panels.reversed()))
+        assertEquals("right", findParentPanel(rightBubble, panels.reversed()))
+    }
+
+    @Test
+    fun `equally contained bubble belongs to the smaller detected panel`() {
+        val panels = listOf(
+            "page" to PanelBounds(0f, 0f, 1000f, 1000f),
+            "panel" to PanelBounds(10f, 10f, 400f, 400f)
+        )
+        val bubble = PanelBounds(50f, 50f, 100f, 100f)
+
+        assertEquals("panel", findParentPanel(bubble, panels))
+        assertEquals("panel", findParentPanel(bubble, panels.reversed()))
+    }
+
+    @Test
+    fun `undetected panels and edge-only contact leave bubbles unassigned`() {
+        val bubble = PanelBounds(100f, 100f, 200f, 200f)
+
+        assertNull(findParentPanel(bubble, emptyList<Pair<Long, PanelBounds>>()))
+        assertNull(findParentPanel(bubble, listOf(1L to PanelBounds(0f, 0f, 100f, 100f))))
+    }
+
     @Test
     fun `staggered panels in the same row follow left to right reading order`() {
         val panels = listOf(
